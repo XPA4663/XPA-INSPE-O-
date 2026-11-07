@@ -1,16 +1,22 @@
 XPA · Inspeções e Manutenção — aplicativo único (PWA offline)
 
-Módulos incluídos nesta versão:
+Módulos incluídos nesta versão (8):
   🌡️ Inspeção termográfica (NETA Tab. 100.18)
-  🏭 Manutenção preventiva de subestação (AT/MT/BT, proteção, aterramento, civil)
-Próximos: inspeção visual de subestação, gerador, motores, laudo SPDA, laudo NR-10, visita técnica.
+  🏭 Manutenção preventiva de subestação (AT/MT/BT, proteção, aterramento, civil – com ensaios)
+  👁️ Inspeção visual de subestação (mesmos checklists, sem ensaios)
+  🔋 Inspeção de grupo gerador (motor, alternador, QTA; isolamento IP/DAR, ôhmica, teste em carga)
+  ⚙️ Inspeção de motores elétricos (isolamento, ôhmica, corrente, temperatura, vibração)
+  🌩️ Laudo de SPDA (NBR 5419 – captação, descidas, aterramento, DPS; resistência e continuidade)
+  🦺 Laudo / auditoria NR-10 (prontuário, medidas de controle, instalações, EPI/EPC, emergência)
+  🧰 Visita técnica (constatações por item, fotos, prioridade, recomendações para proposta)
 
 Arquivos (enviar TODOS para a raiz do repositório):
-  index.html, mod-termo.js, mod-se.js, sw.js, manifest.webmanifest, icon-180.png, icon-192.png, icon-512.png
+  index.html, mod-termo.js, mod-checklist.js, mod-se.js, mod-gerador.js, mod-motores.js, mod-spda.js,
+  mod-nr10.js, mod-visita.js, sw.js, manifest.webmanifest, icon-180.png, icon-192.png, icon-512.png
 
 Publicar no GitHub Pages:
  1. github.com > New repository > nome: XPA-INSPECOES > Public > Create.
- 2. "uploading an existing file" > selecione os 8 arquivos > Commit changes.
+ 2. "uploading an existing file" > selecione os 14 arquivos > Commit changes.
  3. Settings > Pages > Source: "Deploy from a branch" > Branch: main / (root) > Save.
  4. Aguarde 1–2 min. Endereço: https://SEU-USUARIO.github.io/XPA-INSPECOES/
 
@@ -23,6 +29,8 @@ Migrar os dados dos apps antigos (XPA-TERMOGRAGIA e XPA-SUBESTACAO):
  - No app antigo, abra cada inspeção > "Exportar backup" (arquivo .json).
  - No app novo, tela inicial > "Importar backup" > escolha o .json. Ele é convertido automaticamente.
 
+Estrutura: index.html = núcleo (telas, armazenamento, fotos, backup, kits de PDF/Excel);
+mod-checklist.js = fábrica dos módulos de checklist; cada mod-xxx.js = um tipo de trabalho.
 Adicionar um módulo novo: criar mod-xxx.js, incluir <script src="mod-xxx.js"> no index.html
 e acrescentar './mod-xxx.js' na lista LOCAL do sw.js. Atualizar: mudar VERSION em sw.js.
 
