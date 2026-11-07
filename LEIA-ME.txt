@@ -1,0 +1,29 @@
+XPA · Inspeções e Manutenção — aplicativo único (PWA offline)
+
+Módulos incluídos nesta versão:
+  🌡️ Inspeção termográfica (NETA Tab. 100.18)
+  🏭 Manutenção preventiva de subestação (AT/MT/BT, proteção, aterramento, civil)
+Próximos: inspeção visual de subestação, gerador, motores, laudo SPDA, laudo NR-10, visita técnica.
+
+Arquivos (enviar TODOS para a raiz do repositório):
+  index.html, mod-termo.js, mod-se.js, sw.js, manifest.webmanifest, icon-180.png, icon-192.png, icon-512.png
+
+Publicar no GitHub Pages:
+ 1. github.com > New repository > nome: XPA-INSPECOES > Public > Create.
+ 2. "uploading an existing file" > selecione os 8 arquivos > Commit changes.
+ 3. Settings > Pages > Source: "Deploy from a branch" > Branch: main / (root) > Save.
+ 4. Aguarde 1–2 min. Endereço: https://SEU-USUARIO.github.io/XPA-INSPECOES/
+
+Instalar no celular (com internet, só na primeira vez):
+ - Android (Chrome): abra o endereço > menu ⋮ > "Instalar app" / "Adicionar à tela inicial".
+ - iPhone (Safari): abra o endereço > Compartilhar > "Adicionar à Tela de Início".
+ - Abra o app instalado uma vez com internet e espere ~10 s (baixa os geradores de PDF/Excel).
+
+Migrar os dados dos apps antigos (XPA-TERMOGRAGIA e XPA-SUBESTACAO):
+ - No app antigo, abra cada inspeção > "Exportar backup" (arquivo .json).
+ - No app novo, tela inicial > "Importar backup" > escolha o .json. Ele é convertido automaticamente.
+
+Adicionar um módulo novo: criar mod-xxx.js, incluir <script src="mod-xxx.js"> no index.html
+e acrescentar './mod-xxx.js' na lista LOCAL do sw.js. Atualizar: mudar VERSION em sw.js.
+
+Importante: os dados ficam no aparelho. Use "Exportar backup" ao final de cada visita.
