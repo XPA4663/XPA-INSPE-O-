@@ -12,11 +12,11 @@ Módulos incluídos nesta versão (8):
 
 Arquivos (enviar TODOS para a raiz do repositório):
   index.html, mod-termo.js, mod-checklist.js, mod-se.js, mod-gerador.js, mod-motores.js, mod-spda.js,
-  mod-nr10.js, mod-visita.js, sw.js, manifest.webmanifest, icon-180.png, icon-192.png, icon-512.png
+  mod-nr10.js, mod-visita.js, firebase-config.js, sw.js, manifest.webmanifest, icon-180.png, icon-192.png, icon-512.png
 
 Publicar no GitHub Pages:
  1. github.com > New repository > nome: XPA-INSPECOES > Public > Create.
- 2. "uploading an existing file" > selecione os 14 arquivos > Commit changes.
+ 2. "uploading an existing file" > selecione os 15 arquivos > Commit changes.
  3. Settings > Pages > Source: "Deploy from a branch" > Branch: main / (root) > Save.
  4. Aguarde 1–2 min. Endereço: https://SEU-USUARIO.github.io/XPA-INSPECOES/
 
@@ -35,3 +35,39 @@ Adicionar um módulo novo: criar mod-xxx.js, incluir <script src="mod-xxx.js"> n
 e acrescentar './mod-xxx.js' na lista LOCAL do sw.js. Atualizar: mudar VERSION em sw.js.
 
 Importante: os dados ficam no aparelho. Use "Exportar backup" ao final de cada visita.
+
+==================== LOGIN E SINCRONIZAÇÃO NA NUVEM (Firebase – opcional) ====================
+Sem configurar, o app funciona como antes (dados só no aparelho). Para ativar login com e-mail e senha
+e sincronizar os trabalhos entre aparelhos (gratuito no plano Spark do Firebase):
+
+ 1. Acesse https://console.firebase.google.com > "Adicionar projeto" (ex.: xpa-inspecoes). Google Analytics pode ficar desativado.
+ 2. Menu "Criação" > Authentication > "Começar" > guia "Sign-in method" > ative "E-mail/senha" > Salvar.
+    Na guia "Users" > "Adicionar usuário": cadastre o e-mail e a senha de cada técnico.
+    Em "Settings" > "Domínios autorizados" > adicione: SEU-USUARIO.github.io
+ 3. Menu "Criação" > Firestore Database > "Criar banco de dados" > local: southamerica-east1 (São Paulo)
+    > "Iniciar no modo de produção". Depois, guia "Regras" > apague tudo e cole:
+
+      rules_version = '2';
+      service cloud.firestore {
+        match /databases/{database}/documents {
+          match /data/users/{uid}/{docId} {
+            allow read, write: if request.auth != null && request.auth.uid == uid;
+          }
+        }
+      }
+
+    > Publicar. (Cada usuário só lê e grava os próprios trabalhos.)
+ 4. Engrenagem > "Configurações do projeto" > "Seus apps" > ícone Web (</>) > apelido "XPA Inspeções"
+    > Registrar app > copie o bloco  const firebaseConfig = { apiKey: "...", ... }
+ 5. Abra o arquivo firebase-config.js no GitHub (lápis para editar) e substitua os valores pelos copiados.
+    Commit. Em 1–2 min o app passa a pedir login.
+
+Como funciona depois de ativado:
+ - Tela de login (e-mail/senha), "Esqueci a senha" envia e-mail de redefinição.
+ - "Usar sem conta" mantém o uso só no aparelho (útil sem internet no primeiro acesso).
+ - Offline: o app abre com a sessão lembrada e grava no aparelho; ao voltar a internet, envia tudo (status no topo).
+ - Cada técnico vê só os próprios trabalhos. Para compartilhar entre técnicos, use "Exportar/Importar backup"
+   (ou peça a versão com "equipe", em que todos da empresa veem tudo).
+ - Fotos ficam dentro dos documentos (limite de 1 MB por foto já respeitado pela compressão do app).
+
+Para desativar o login: volte apiKey para "COLE_AQUI" em firebase-config.js.

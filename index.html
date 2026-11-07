@@ -85,6 +85,10 @@ button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line
 .tp{padding:10px 12px;font-size:14px;border-color:var(--line)}.tp .note{font-size:11px}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}.chip{font-size:12px;padding:5px 10px;border-radius:16px;background:#fff;border:1px solid var(--line)}.chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
 </style>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
 </head>
 <body>
 <header>
@@ -169,13 +173,14 @@ function vHome(){
   let list = INSPS.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
   if(FILTRO) list=list.filter(x=>x.mod===FILTRO);
   const chips=`<div class="chips"><button class="chip ${FILTRO?'':'on'}" data-f="">Todos (${INSPS.length})</button>${MODS_ORD.map(k=>{ const n=INSPS.filter(x=>x.mod===k).length; return n?`<button class="chip ${FILTRO===k?'on':''}" data-f="${k}">${MODS[k].icone} ${esc(MODS[k].curto)} (${n})</button>`:''; }).join('')}</div>`;
-  $('#app').innerHTML = storageBanner() + `<h2>Trabalhos</h2>${INSPS.length?chips:''}
+  $('#app').innerHTML = contaBarra() + storageBanner() + `<h2>Trabalhos</h2>${INSPS.length?chips:''}
   <div class="list">${list.length? list.map(x=>{ const m=MODS[x.mod]; if(!m) return ''; const r=m.resumo(x);
     return `<div class="it" data-id="${x.id}"><div style="font-size:22px">${m.icone}</div><div style="flex:1"><div class="t">${esc(x.h.cliente||'Sem cliente')}</div>
     <div class="s">${esc(m.curto)} · ${x.h.numero?esc(x.h.numero)+' · ':''}${fmtDate(x.h.data)}${r.txt?' · '+esc(r.txt):''}</div></div>${r.pill?`<span class="pill p-${r.pill.k}">${esc(r.pill.t)}</span>`:''}<span style="color:var(--muted)">›</span></div>`;}).join('')
   : `<div class="empty">Nenhum trabalho ainda.<br>Toque em <b>Novo trabalho</b> para começar.</div>`}</div>
   <div class="card note"><b>Módulos disponíveis:</b> ${MODS_ORD.map(k=>MODS[k].icone+' '+esc(MODS[k].nome)).join(' · ')}.<br>Cada trabalho gera relatório em PDF (padrão XPA) ou Excel. Os dados ficam no aparelho; exporte o backup ao fim de cada visita.</div>
   <div class="row"><button class="btn ghost" id="imp">Importar backup</button><input type="file" id="impf" accept=".json,application/json" style="display:none"></div>`;
+  bindContaBarra();
   document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{ FILTRO=c.dataset.f; vHome(); });
   document.querySelectorAll('.it').forEach(e=>e.onclick=()=>{ const k=INSPS.findIndex(x=>x.id===e.dataset.id); INSPS[k]=editable(INSPS[k]); CUR=INSPS[k]; go('job'); });
   $('#imp').onclick=()=>$('#impf').click();
@@ -195,7 +200,7 @@ function novoTrabalho(mod){
   const m=MODS[mod]; const ult=INSPS.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0))[0];
   const h=Object.assign({numero:'',cliente:'',local:'',data:today(),resp:RESP_PADRAO,obs:''}, m.novoH());
   if(ult&&ult.h){ h.cliente=ult.h.cliente||''; h.local=ult.h.local||''; } // sugere o último cliente
-  const n={kind:'job', mod, id:uid(mod), createdAt:Date.now(), updatedAt:Date.now(), h, items:[]};
+  const n={kind:'job', mod, id:uid(mod), createdAt:Date.now(), updatedAt:Date.now(), h, items:[], uid:UID||undefined};
   INSPS.push(n); CUR=n; writeDoc(n.id, JSON.parse(JSON.stringify(n))); go('job');
 }
 /* botões padrão do rodapé do trabalho e exclusão */
@@ -231,7 +236,7 @@ async function importBackup(e){
     let job=null; if(o.app==='xpa-inspecoes') job=o.job; else job=converterLegado(o);
     if(!job||!MODS[job.mod]) throw 0;
     for(const [id,p] of Object.entries(o.photos||{})){ photoCache[id]=p; await writeDoc(id,p); }
-    job.kind='job'; job.updatedAt=Date.now(); const ex=INSPS.findIndex(x=>x.id===job.id); if(ex>=0) INSPS[ex]=job; else INSPS.push(job);
+    job.kind='job'; job.updatedAt=Date.now(); if(UID) job.uid=UID; const ex=INSPS.findIndex(x=>x.id===job.id); if(ex>=0) INSPS[ex]=job; else INSPS.push(job);
     await writeDoc(job.id, job); toast('Backup importado'+(o.app!=='xpa-inspecoes'?' (convertido do app antigo).':'.')); render();
   }catch(err){ toast('Arquivo de backup inválido.'); }
 }
@@ -632,6 +637,44 @@ async function ensureExcelJS(){
   try{ await loadScript('https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js'); }catch(e){}
   return !!window.ExcelJS;
 }
+
+/* ======================= LOGIN (Firebase) ======================= */
+const FBCFG=(window.FIREBASE_CONFIG&&window.FIREBASE_CONFIG.apiKey&&!/COLE_AQUI/.test(window.FIREBASE_CONFIG.apiKey))?window.FIREBASE_CONFIG:null;
+let AUTH=null, FBUSER=null;
+const SEMCONTA='xpa_sem_conta';
+function erroAuth(e){ const c=(e&&e.code)||''; return c.includes('invalid-credential')||c.includes('wrong-password')||c.includes('user-not-found')?'E-mail ou senha incorretos.':c.includes('invalid-email')?'E-mail inválido.':c.includes('too-many-requests')?'Muitas tentativas. Aguarde alguns minutos.':c.includes('network')?'Sem conexão com a internet.':c.includes('user-disabled')?'Usuário desativado. Fale com o administrador.':'Não foi possível entrar ('+(c||(e&&e.message)||'erro')+').'; }
+function telaLogin(msg){
+  setBar('');
+  $('#app').innerHTML=`<div class="card" style="max-width:420px;margin:18px auto">
+    <div style="font-weight:bold;color:var(--navy);font-size:18px;margin-bottom:4px">Entrar na conta XPA</div>
+    <div class="note" style="margin-bottom:10px">Os trabalhos ficam sincronizados na nuvem e disponíveis em qualquer aparelho. Sem internet, o app continua funcionando com o que já estiver salvo.</div>
+    ${msg?`<div class="banner" style="margin-bottom:10px">${esc(msg)}</div>`:''}
+    <label>E-mail</label><input type="email" id="lg_email" autocomplete="username" inputmode="email" value="${esc(localStorage.getItem('xpa_last_email')||'')}">
+    <label>Senha</label><input type="password" id="lg_senha" autocomplete="current-password">
+    <div id="lg_err" class="note" style="color:#C62828;min-height:16px;margin-top:4px"></div>
+    <button class="btn gold" id="lg_ok" style="width:100%;margin-top:6px">Entrar</button>
+    <div class="row" style="justify-content:space-between;margin-top:10px"><button id="lg_esq">Esqueci a senha</button><button id="lg_sem">Usar sem conta</button></div>
+    <div class="note" style="margin-top:10px">Sem conta: os dados ficam apenas neste aparelho. Para criar usuários, o administrador usa o console do Firebase.</div>
+  </div>`;
+  const go_=async()=>{ const em=$('#lg_email').value.trim(), sn=$('#lg_senha').value; if(!em||!sn){ $('#lg_err').textContent='Informe e-mail e senha.'; return; }
+    $('#lg_ok').disabled=true; $('#lg_err').textContent='';
+    try{ await AUTH.signInWithEmailAndPassword(em,sn); localStorage.setItem('xpa_last_email',em); sessionStorage.removeItem(SEMCONTA); }
+    catch(e){ $('#lg_err').textContent=erroAuth(e); $('#lg_ok').disabled=false; } };
+  $('#lg_ok').onclick=go_; $('#lg_senha').onkeydown=(e)=>{ if(e.key==='Enter') go_(); };
+  $('#lg_esq').onclick=async()=>{ const em=$('#lg_email').value.trim(); if(!em){ $('#lg_err').textContent='Digite o e-mail para receber o link de redefinição.'; return; }
+    try{ await AUTH.sendPasswordResetEmail(em); toast('E-mail de redefinição enviado para '+em); }catch(e){ $('#lg_err').textContent=erroAuth(e); } };
+  $('#lg_sem').onclick=()=>{ sessionStorage.setItem(SEMCONTA,'1'); iniciar(); };
+}
+function contaBarra(){
+  if(!FBCFG) return '';
+  if(FBUSER) return `<div class="note" style="display:flex;justify-content:space-between;align-items:center;margin:0 0 8px">👤 ${esc(FBUSER.email||'')}<button id="lg_sair" style="font-size:12px;padding:4px 10px">Sair</button></div>`;
+  return `<div class="note" style="display:flex;justify-content:space-between;align-items:center;margin:0 0 8px">Usando sem conta (dados só neste aparelho)<button id="lg_entrar" style="font-size:12px;padding:4px 10px">Entrar</button></div>`;
+}
+function bindContaBarra(){
+  const s=$('#lg_sair'); if(s) s.onclick=()=>confirmBox('Sair da conta? Os trabalhos já sincronizados continuam na nuvem; os pendentes de envio ficam neste aparelho até o próximo login.', async()=>{ try{ await AUTH.signOut(); }catch(e){} sessionStorage.removeItem(SEMCONTA); location.reload(); });
+  const e=$('#lg_entrar'); if(e) e.onclick=()=>{ sessionStorage.removeItem(SEMCONTA); location.reload(); };
+}
+
 </script>
 <script src="mod-termo.js"></script>
 <script src="mod-checklist.js"></script>
@@ -644,7 +687,7 @@ async function ensureExcelJS(){
 <script>
 /* ======================= DIAGNÓSTICO ======================= */
 document.addEventListener('click',e=>{ if(e.target&&e.target.id==='sv'){
-  const t=`Ambiente Claude: ${DIAG.runtime}\nBanco de dados: ${DIAG.db}\nUsuário: ${DIAG.user} (${DIAG.id})\nDownload de arquivos: ${DIAG.downloads}\nArmazenamento do aparelho: ${DIAG.local} · banco local: ${DIAG.idb}\nPendentes de envio: ${PENDING}\nModo atual: ${MODE==='db'?'conta':MODE==='local'?'aparelho':'memória'}${DIAG.erro?'\nErro: '+DIAG.erro:''}`;
+  const t=`Login: ${FBCFG?(FBUSER?FBUSER.email:'sem conta'):'não configurado'}\nAmbiente: ${DIAG.runtime}\nBanco de dados: ${DIAG.db}\nUsuário: ${DIAG.user} (${DIAG.id})\nDownload de arquivos: ${DIAG.downloads}\nArmazenamento do aparelho: ${DIAG.local} · banco local: ${DIAG.idb}\nPendentes de envio: ${PENDING}\nModo atual: ${MODE==='db'?'conta':MODE==='local'?'aparelho':'memória'}${DIAG.erro?'\nErro: '+DIAG.erro:''}`;
   $('#mbox').innerHTML=`<p style="margin-top:0;font-weight:bold;color:var(--navy)">Diagnóstico de salvamento</p><pre style="white-space:pre-wrap;font-size:13px;background:var(--bg);padding:10px;border-radius:8px">${esc(t)}</pre><p class="note">Envie um print desta tela para o suporte.</p><div class="row" style="justify-content:flex-end"><button class="btn" id="mok">Fechar</button></div>`;
   $('#modal').classList.add('show'); $('#mok').onclick=()=>$('#modal').classList.remove('show');
 }});
@@ -660,15 +703,31 @@ if('serviceWorker' in navigator && location.protocol.startsWith('http')){
 try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
 /* ======================= INIT ======================= */
 $('#app').innerHTML='<div class="empty">Carregando trabalhos...</div>'; setBar('');
-(async()=>{
+let BOOT=false;
+async function iniciar(){
   let user=null, dl=null;
-  IDB=await idbOpen(); DIAG.idb=IDB?'ok':'indisponível';
-  DIAG.local=legacyLoad()?'ok':'bloqueado';
-  DIAG.runtime = window.claude ? 'sim' : 'não';
-  try{ if(window.claude) [DB,user,dl]=await Promise.all([window.claude.use('db'), window.claude.use('user'), window.claude.use('downloads')]); }catch(e){ DIAG.erro=String(e&&e.message||e); }
-  try{ UID = user ? await user.id() : null; }catch(e){ UID=null; }
-  DIAG.db=DB?'ok':'indisponível'; DIAG.user=user?'ok':'indisponível'; DIAG.id=UID?'ok':'sem id'; DIAG.downloads=dl?'ok':'indisponível';
-  const local=await localList();
+  if(!BOOT){ BOOT=true; IDB=await idbOpen(); DIAG.idb=IDB?'ok':'indisponível'; DIAG.local=legacyLoad()?'ok':'bloqueado'; }
+  DB=null; UID=null; MODE='mem';
+  if(FBCFG && window.firebase){
+    DIAG.runtime='firebase';
+    try{
+      if(!firebase.apps.length) firebase.initializeApp(FBCFG);
+      AUTH=firebase.auth();
+      if(!FBUSER) FBUSER=await new Promise(res=>{ const un=AUTH.onAuthStateChanged(u=>{ un(); res(u); },()=>res(null)); setTimeout(()=>res(AUTH.currentUser),6000); });
+      if(!window._xpaAuthL){ window._xpaAuthL=1; AUTH.onAuthStateChanged(u=>{ if(u&&!FBUSER){ FBUSER=u; iniciar(); } }); }
+      if(!FBUSER && !sessionStorage.getItem(SEMCONTA)){ telaLogin(online()?'':'Sem internet: para entrar é preciso conexão. Você pode usar sem conta por enquanto.'); return; }
+      if(FBUSER){ DB=firebase.firestore(); UID=FBUSER.uid; }
+    }catch(e){ DIAG.erro=String(e&&e.message||e); }
+  } else if(FBCFG && !window.firebase){ DIAG.erro='Biblioteca do Firebase não carregou (sem internet no primeiro acesso?)'; toast('Login indisponível sem internet no primeiro acesso. Usando o aparelho.'); }
+  else {
+    DIAG.runtime = window.claude ? 'sim' : 'não';
+    try{ if(window.claude) [DB,user,dl]=await Promise.all([window.claude.use('db'), window.claude.use('user'), window.claude.use('downloads')]); }catch(e){ DIAG.erro=String(e&&e.message||e); }
+    try{ UID = user ? await user.id() : null; }catch(e){ UID=null; }
+  }
+  DIAG.db=DB?'ok':'indisponível'; DIAG.user=(FBUSER||user)?'ok':'indisponível'; DIAG.id=UID?'ok':'sem id'; DIAG.downloads=dl?'ok':'indisponível';
+  let local=await localList();
+  if(UID){ for(const x of local){ if(!x.uid){ x.uid=UID; await localPut(x.id,x); } } local=local.filter(x=>x.uid===UID); }
+  else if(FBCFG){ local=local.filter(x=>!x.uid); }
   if(DB && UID){
     MODE='db';
     let remote=null;
@@ -682,12 +741,11 @@ $('#app').innerHTML='<div class="empty">Carregando trabalhos...</div>'; setBar('
     INSPS=Object.values(map);
     if(!remote) toast(online()?'A conta não respondeu: usando os dados salvos no aparelho.':'Sem internet: usando os dados salvos no aparelho.');
   } else { MODE = (IDB||DIAG.local==='ok') ? 'local' : 'mem'; INSPS=local; }
-  window.addEventListener('online',()=>{ showStatus(); sync(); });
-  window.addEventListener('offline',showStatus);
-  setInterval(()=>{ if(PENDING) sync(); },30000);
-  await refreshPending(); render(); sync();
+  if(!window._xpaL){ window._xpaL=1; window.addEventListener('online',()=>{ showStatus(); sync(); }); window.addEventListener('offline',showStatus); setInterval(()=>{ if(PENDING) sync(); },30000); }
+  await refreshPending(); go('home'); sync();
   setTimeout(()=>{ prefetchPhotos(); ensureExcelJS(); },3000);
-})();
+}
+iniciar();
 </script>
 </body>
 </html>

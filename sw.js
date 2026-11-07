@@ -1,6 +1,6 @@
 /* XPA · Inspeções — service worker (funcionamento offline)
    Para publicar uma nova versão do app, altere o número em VERSION. */
-const VERSION = 'xpa-inspecoes-v1';
+const VERSION = 'xpa-inspecoes-v2';
 
 const LOCAL = [
   './',
@@ -13,6 +13,7 @@ const LOCAL = [
   './mod-spda.js',
   './mod-nr10.js',
   './mod-visita.js',
+  './firebase-config.js',
   './manifest.webmanifest',
   './icon-180.png',
   './icon-192.png',
@@ -21,7 +22,10 @@ const LOCAL = [
 const CDN = [
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js'
+  'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js',
+  'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js',
+  'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js',
+  'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js'
 ];
 
 self.addEventListener('install', (e) => {
@@ -49,7 +53,7 @@ self.addEventListener('fetch', (e) => {
   if (!isLocal && !isCdn) return;
   e.respondWith((async () => {
     const c = await caches.open(VERSION);
-    const key = req.mode === 'navigate' ? './index.html' : req;
+    const key = (req.mode === 'navigate' && (url.pathname.endsWith('/') || url.pathname.endsWith('/index.html'))) ? './index.html' : req;
     const cached = await c.match(key, { ignoreSearch: req.mode === 'navigate' });
     const net = fetch(req).then(r => {
       if (r && r.ok) c.put(key, r.clone());
