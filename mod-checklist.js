@@ -49,9 +49,11 @@ function criarModuloChecklist(cfg){
     const T=TIPOS[tipo]; const d={tag:'',local:'',fab:'',modelo:'',serie:'',ano:''};
     (T.campos||[]).forEach(c=>{ d[c[0]]=c[3]||(Array.isArray(c[2])?c[2][0]:''); });
     if(base){ Object.assign(d, JSON.parse(JSON.stringify(base.d))); d.tag=''; d.serie=''; }
-    return {id:uid('eq'), tipo, d, items:{}, m:{}, pantes:[], pdepois:[], photos:[], diag:'', rec:'', manual:'', just:''};
+    const it={id:uid('eq'), tipo, d, items:{}, m:{}, pantes:[], pdepois:[], photos:[], diag:'', rec:'', manual:'', just:''};
+    if(T.ext&&T.ext.novo) T.ext.novo(it,base);
+    return it;
   }
-  function photoIds(e){ return [...(e.pantes||[]),...(e.pdepois||[]),...(e.photos||[]),...Object.values(e.items||{}).flatMap(it=>it.photos||[])]; }
+  function photoIds(e){ const X=(TIPOS[e.tipo]||{}).ext; return [...(e.pantes||[]),...(e.pdepois||[]),...(e.photos||[]),...Object.values(e.items||{}).flatMap(it=>it.photos||[]),...((X&&X.slots)||[]).flatMap(s=>e[s]||[])]; }
   function eqTitle(e){ const T=TIPOS[e.tipo]; return (e.d.tag||T.nome); }
 
   function equipResult(e,h){
@@ -121,6 +123,7 @@ function criarModuloChecklist(cfg){
     ${meds.length?`<div class="sec">Medições e ensaios</div>
     <div class="card" id="mm">${meds.map(g=>`<div style="font-weight:bold;color:var(--navy);margin:8px 0 2px">${esc(g.g)}</div><div class="grid">${g.f.map(f=>field(f[0],f[1],e.m,'text','',DEC)).join('')}</div><div class="note">${esc(g.note||'')}</div>`).join('')}
     <div id="medres" style="margin-top:10px"></div></div>`:''}
+    ${T.ext&&comMeds?T.ext.html(e):''}
     <div class="sec">Fotos</div>
     <div class="card">
       <label>${esc(tx.antes)}</label><div class="row">${photoBtns('data-slot="pantes"')}</div><div class="thumbs" id="th_pantes"></div>
@@ -167,7 +170,8 @@ function criarModuloChecklist(cfg){
       drawSlot(slot);
     });
     const drawSlot=(slot)=>{ const arr=slotArr(slot); drawThumbs(slotEl(slot), arr, id=>{ const a=slotArr(slot); a.splice(a.indexOf(id),1); }); };
-    ['pantes','pdepois','photos'].forEach(drawSlot);
+    ['pantes','pdepois','photos'].concat(T.ext&&comMeds?(T.ext.slots||[]):[]).forEach(s=>{ if(!e[s]) e[s]=[]; drawSlot(s); });
+    if(T.ext&&comMeds) T.ext.bind(e,refreshCalc);
     T.items.forEach(it=>{ if((e.items[it[0]]||{}).photos?.length) drawSlot('item:'+it[0]); });
     refreshCalc();
     setBar(`<button class="btn" id="nx">Próximo ${IN}</button><button class="btn gold" id="pdf2">Gerar relatório</button>`);
@@ -282,6 +286,7 @@ function criarModuloChecklist(cfg){
             styles:{fontSize:7.6,cellPadding:1.3,lineColor:C_LINE,lineWidth:.2,textColor:INK}, columnStyles:{1:{cellWidth:26,halign:'right'},2:{cellWidth:36},3:{cellWidth:24,fontStyle:'bold',halign:'center'}},
             didParseCell:c=>{ if(c.section==='body'&&c.column.index===3){ const st=r.meds[c.row.index].st; if(st) c.cell.styles.textColor=C_RES[st]; } }}); }
       }
+      if(T.ext&&comMeds&&T.ext.pdf) y=await T.ext.pdf(K,e,y,h);
       const A=(e.pantes||[])[0], D=(e.pdepois||[])[0];
       if(A||D){ const cw=(W-2*M-6)/2, chh=64; y=ensure(y,chh+12); await K.foto(A,M,y,cw,chh,tx.antes); await K.foto(D,M+cw+6,y,cw,chh,tx.depois); y+=chh+9; }
       if(e.diag){ y=ensure(y,16); y=para((cfg.lblDiag||'Diagnóstico / serviços executados')+': '+e.diag,y,{size:9}); }
@@ -355,6 +360,8 @@ function criarModuloChecklist(cfg){
       r=head(w4,'MEDIÇÕES, ENSAIOS E AVALIAÇÃO',7,SUB); tableHeader(w4,r,['Nº',INcap,'Tipo','Grandeza','Valor','Limite de referência','Resultado']); r++;
       eqs.forEach((e,i)=>{ const T=TIPOS[e.tipo];
         for(const g of (T.meds||[])) for(const f of g.f){ const v=(e.m||{})[f[0]]; if(v===undefined||v==='') continue; cellRow(w4,r,[i+1,eqTitle(e),T.nome,`${g.g} – ${f[1]}`,v,'',''],{center:[0,4]}); r++; }
+        if(T.ext&&T.ext.excelRows) for(const x of T.ext.excelRows(e)){ const row=cellRow(w4,r,[i+1,eqTitle(e),T.nome,x[0],x[1],x[2],x[3]],{center:[0,4,6]});
+          if(x[4]){ const c=row.getCell(7); c.font=font({bold:true,size:9,color:{argb:PC[x[4]]}}); c.fill=fill(PF[x[4]]); } r++; }
         for(const x of res[i].meds){ const row=cellRow(w4,r,[i+1,eqTitle(e),T.nome,'Avaliação: '+x.label,x.val,x.lim,x.st?(x.st==='ok'?'OK':x.st==='att'?'Atenção':'Não conforme'):'—'],{center:[0,4,6]});
           if(x.st){ const c=row.getCell(7); c.font=font({bold:true,size:9,color:{argb:PC[x.st]}}); c.fill=fill(PF[x.st]); } r++; } });
       w4.autoFilter={from:{row:5,column:1},to:{row:r-1,column:7}};
