@@ -219,7 +219,12 @@ function bindJobFooter(){
 /* ======================= ANEXOS (certificados de calibração e ART) ======================= */
 const ANEXOS=[['anexCal','Anexo A – Certificados de calibração dos instrumentos'],['anexArt','Anexo B – ART do serviço']];
 let PDFJS=null;
-async function pdfjs(){ if(PDFJS) return PDFJS; const m=await import('./pdfjs/pdf.min.mjs'); m.GlobalWorkerOptions.workerSrc=new URL('./pdfjs/pdf.worker.min.mjs',location.href).href; PDFJS=m; return m; }
+const PDFJS_CDN='https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/legacy/build/';
+async function pdfjs(){ if(PDFJS) return PDFJS;
+  let m=null, base=null;
+  for(const b of [new URL('./pdfjs/',location.href).href, PDFJS_CDN]){ try{ m=await import(b+'pdf.min.mjs'); base=b; break; }catch(e){} }
+  if(!m) throw new Error('leitor de PDF indisponível – verifique a internet');
+  m.GlobalWorkerOptions.workerSrc=base+'pdf.worker.min.mjs'; PDFJS=m; return m; }
 async function pdfParaImagens(file,onProg){
   const lib=await pdfjs(); const pdf=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise; const out=[];
   for(let i=1;i<=pdf.numPages;i++){ onProg&&onProg(i,pdf.numPages);
@@ -231,9 +236,10 @@ async function pdfParaImagens(file,onProg){
   return out;
 }
 function anexosHtml(){ if(!CUR||!CUR.h) return ''; const h=CUR.h;
-  return `<div class="sec">Anexos do relatório</div><div class="card">${ANEXOS.map(([k,t])=>`<label>${t}</label><div class="row"><button class="lbtn" data-anx="${k}">📎 Anexar PDF ou foto</button><input type="file" class="hid" accept="application/pdf,image/*" multiple data-anxf="${k}"><span class="note" id="anxs_${k}">${(h[k]||[]).length} página(s)</span></div><div class="thumbs" id="th_${k}"></div>`).join('')}
+  return `<div class="sec">Anexos do relatório</div><div class="card"><div class="grid"><div><label>Nº da ART</label><input data-anxk="artNum" value="${esc(h.artNum||'')}" placeholder="Ex.: 2620261234567"></div><div><label>Data de registro da ART</label><input type="date" data-anxk="artData" value="${esc(h.artData||'')}"></div></div>${ANEXOS.map(([k,t])=>`<label>${t}</label><div class="row"><button class="lbtn" data-anx="${k}">📎 Anexar PDF ou foto</button><input type="file" class="hid" accept="application/pdf,image/*" multiple data-anxf="${k}"><span class="note" id="anxs_${k}">${(h[k]||[]).length} página(s)</span></div><div class="thumbs" id="th_${k}"></div>`).join('')}
   <div class="note" style="margin-top:6px">PDFs são convertidos em imagens, página por página, e entram no final do relatório PDF (Anexo A e Anexo B).</div></div>`; }
 function bindAnexos(){ if(!CUR||!CUR.h) return; const h=CUR.h;
+  document.querySelectorAll('[data-anxk]').forEach(el=>{ el.oninput=el.onchange=()=>{ h[el.dataset.anxk]=el.value; saveCur(); }; });
   ANEXOS.forEach(([k])=>{ h[k]=h[k]||[];
     const cnt=()=>{ const s=$('#anxs_'+k); if(s) s.textContent=h[k].length+' página(s)'; };
     const draw=()=>{ drawThumbs('th_'+k,h[k],id=>{ h[k].splice(h[k].indexOf(id),1); cnt(); }); cnt(); };
@@ -345,10 +351,11 @@ function pdfKit(h,o={}){
     doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...C_MUT); doc.text(EMPRESA.nome,W/2,y+9.5,{align:'center'});
     if(linha2) doc.text(doc.splitTextToSize(linha2,W-2*M)[0],W/2,y+14,{align:'center'}); return y+18; };
   K.finish=async(title,fname)=>{
-    for(const [k,t] of (typeof ANEXOS!=='undefined'?ANEXOS:[])){ const ids=(h&&h[k])||[]; let first=true;
-      for(const id of ids){ const P=await getPhoto(id); if(!P) continue; doc.addPage(); let y=22;
-        if(first){ TOC.push({t,p:doc.getNumberOfPages()}); y=K.band(t,y); first=false; }
-        const mw=W-2*M, mh=276-y, kk=Math.min(mw/P.w,mh/P.h); try{ doc.addImage(P.data,'JPEG',(W-P.w*kk)/2,y,P.w*kk,P.h*kk); }catch(e){} } }
+    if(!o.rotulo && typeof ANEXOS!=='undefined') for(const [k,t] of ANEXOS){ const ids=(h&&h[k])||[]; const Ps=[]; for(const id of ids){ const P=await getPhoto(id); if(P) Ps.push(P); }
+      doc.addPage(); let y=22; TOC.push({t,p:doc.getNumberOfPages()}); y=K.band(t,y);
+      if(k==='anexArt'&&(h.artNum||h.artData)){ y=K.para(`ART nº ${h.artNum||'—'}${h.artData?' · registrada em '+fmtDate(h.artData):''} · Responsável técnico: ${h.resp||RESP_PADRAO}`,y,{bold:true,size:9.5,color:C_NAVY}); }
+      if(!Ps.length){ y=K.para(k==='anexCal'?'Certificados de calibração dos instrumentos utilizados disponíveis mediante solicitação.':'ART do serviço registrada no CREA-SP, disponível mediante solicitação.',y,{italic:true,size:9,color:C_MUT}); continue; }
+      Ps.forEach((P,i)=>{ if(i>0){ doc.addPage(); y=22; } const mw=W-2*M, mh=276-y, kk=Math.min(mw/P.w,mh/P.h); try{ doc.addImage(P.data,'JPEG',(W-P.w*kk)/2,y,P.w*kk,P.h*kk); }catch(e){} }); }
     doc.addPage(); const BACKPAGE=doc.getNumberOfPages();
     if(SUMPAGE){ doc.setPage(SUMPAGE); let sy=22;
     doc.setFillColor(...C_BAND); doc.rect(M,sy,W-2*M,8,'F'); doc.setFillColor(...C_GOLD); doc.rect(M,sy,1.4,8,'F');
