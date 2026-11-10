@@ -228,10 +228,10 @@ async function pdfjs(){ if(PDFJS) return PDFJS;
 async function pdfParaImagens(file,onProg){
   const lib=await pdfjs(); const pdf=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise; const out=[];
   for(let i=1;i<=pdf.numPages;i++){ onProg&&onProg(i,pdf.numPages);
-    const pg=await pdf.getPage(i); const v0=pg.getViewport({scale:1}); const v=pg.getViewport({scale:Math.min(2.2,1300/v0.width)});
+    const pg=await pdf.getPage(i); const v0=pg.getViewport({scale:1}); const v=pg.getViewport({scale:Math.min(2,1100/v0.width)});
     const c=document.createElement('canvas'); c.width=Math.round(v.width); c.height=Math.round(v.height); const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height);
     await pg.render({canvasContext:g,viewport:v}).promise;
-    let q=0.8, data=c.toDataURL('image/jpeg',q); while(data.length>900000&&q>0.35){ q-=0.15; data=c.toDataURL('image/jpeg',q); }
+    let q=0.75, data=c.toDataURL('image/jpeg',q); while(data.length>350000&&q>0.4){ q-=0.1; data=c.toDataURL('image/jpeg',q); }
     out.push({data,w:c.width,h:c.height}); }
   return out;
 }
@@ -512,7 +512,8 @@ function scheduleSync(){ clearTimeout(syncT); syncT=setTimeout(sync,1200); }
 async function pushOne(id,op){
   if(op==='del') return withTimeout(col().doc(id).delete(),15000);
   const b=await localGet(id); if(!b) return;
-  return withTimeout(col().doc(id).set(b),25000);
+  const tam=(b.data&&b.data.length)||0; // fotos e páginas de anexo grandes precisam de mais tempo em rede móvel
+  return withTimeout(col().doc(id).set(b),Math.min(180000,30000+tam/8));
 }
 async function sync(){
   if(MODE!=='db'||SYNCING||!online()||!IDB){ showStatus(); return; }
