@@ -47,3 +47,74 @@ Atualização v2 – Manutenção preventiva de subestação: relés de proteç�
    Os demais arquivos e os dados já salvos no aparelho não mudam.
  - Para atualizar: no GitHub, "Add file > Upload files", envie os 3 arquivos (substituindo) e o
    LEIA-ME.txt > Commit. Abra o app com internet e feche/reabra uma vez para carregar a v2.
+
+Atualização v3 – Módulo de Propostas técnicas e comerciais (acesso restrito)
+ - Novo cartão "📑 Propostas técnicas e comerciais" na tela inicial, visível só para usuários autorizados.
+ - Editor completo: cliente, objeto, equipamentos, escopo (com modelos prontos), prazos, etapas,
+   responsabilidades, exclusões e condições. Preço calculado por homem-hora (função × pessoas × horas),
+   deslocamento (veículos × km × R$/km), refeição, análises de óleo, outros itens, margem e desconto.
+   Na proposta, mostra só o valor total ou os itens com preço unitário.
+ - Numeração automática compartilhada (10_26059, 10_26060…), revisões, duplicar e excluir.
+ - "Ler arquivo": lê uma proposta antiga em .docx no próprio aparelho (cliente, contato, local,
+   equipamentos, escopo, pagamento, garantia, validade) ou envia .docx/.pdf para análise por IA.
+ - Gera Word (.docx) e PDF, Técnica e Comercial separadas, no padrão XPA.
+ - Tela "Acessos" (somente administradores): quem pode criar propostas, quem é administrador e o
+   último número usado. Administrador principal fixo: xavier@xpaengenharia.com.br.
+ - Correção: a fila de "pendentes de envio" não trava mais quando um item é recusado pelo Firestore,
+   e o Diagnóstico (toque no selo de status) mostra o "Último erro de envio".
+
+Arquivos novos/alterados nesta versão:
+  index.html, sw.js (VERSION = xpa-inspecoes-v3), mod-proposta.js (novo), docx.min.js (novo),
+  firestore.rules (novo), firebase.json (novo), .firebaserc (novo), functions/index.js e
+  functions/package.json (novos – só para a IA), LEIA-ME.txt
+
+PASSO 1 – Regras do Firestore (obrigatório para o módulo funcionar)
+ - Firebase Console > Firestore Database > Regras > substitua pelo conteúdo de firestore.rules > Publicar.
+ - ATENÇÃO: o bloco "match /data/users/{uid}/{docId}" reproduz o acesso dos trabalhos de inspeção
+   (cada usuário só vê os seus). Se as suas regras atuais tiverem algo a mais, mantenha junto.
+
+PASSO 2 – Publicar o app (GitHub)
+ - Add file > Upload files: index.html, sw.js, mod-proposta.js, docx.min.js, LEIA-ME.txt > Commit.
+ - Abra o app com internet, feche e reabra para carregar a v3.
+ - Entre com xavier@xpaengenharia.com.br > cartão Propostas > "Acessos" > cadastre os e-mails autorizados
+   e confira o "Último número usado" (58 = próxima será 10_26059).
+
+PASSO 3 – Análise por IA (opcional; sem ela a leitura local de .docx continua funcionando)
+ - Requer o plano Blaze no Firebase e uma chave da API da Anthropic (console.anthropic.com).
+ - No computador, com Node 20 instalado, na pasta do repositório:
+     npm install -g firebase-tools
+     firebase login
+     cd functions && npm install && cd ..
+     firebase functions:secrets:set ANTHROPIC_API_KEY      (cole a chave quando pedir)
+     firebase deploy --only functions,firestore:rules
+ - Custo: cobrado por uso na conta da Anthropic (algumas dezenas de centavos por documento).
+   O número de chamadas fica registrado em config/uso_ia.
+
+Atualização v3 (continuação) – dois módulos novos de relatório
+ 🔌 Ensaio VLF e tangente delta em cabos de potência (mod-vlf.js)
+   - Um item por circuito: dados do cabo (U0/U, isolação XLPE/EPR/PILC, seção, comprimento, emendas).
+   - Checklist de segurança e preparação (NR-10 / IEEE 400.2) e resistência de isolamento por fase.
+   - Tangente delta por fase em 0,5 / 1,0 / 1,5 U0, estabilidade (desvio padrão) e DTD; tensão suportável VLF.
+   - Avaliação automática pelos critérios da IEEE 400.2 (sem ação / investigação / ação requerida).
+   - Gráfico TD × tensão por fase, gráfico de estabilidade e DTD, diagrama ilustrativo do ensaio,
+     fotos da montagem, da tela do equipamento e das terminações. Relatório PDF e Excel padrão XPA.
+ 🦺 Ensaios de EPIs e EPCs isolantes (mod-epi.js)
+   - Luvas, mangas, tapetes, lençóis/coberturas, varas de manobra, detectores de tensão, conjuntos de
+     aterramento temporário, ferramentas isoladas, capacetes classe B, calçados e outros.
+   - Inspeção visual por tipo, ensaio dielétrico (tensão, tempo, corrente de fuga e limite), tensões por
+     classe (00 a 4), limiar do detector, resistência dos cabos de aterramento.
+   - Gráficos de tensão por classe e de corrente de fuga × limite, diagrama do ensaio (tanque, placas, vara),
+     fotos do ensaio e da etiqueta. Relatório PDF e Excel padrão XPA.
+ - Correção nos PDFs de todos os módulos: os símbolos ≥ ≤ Ω Δ µ saíam ilegíveis; agora aparecem como
+   >= <= ohm D u.
+ - Arquivos novos: mod-vlf.js, mod-epi.js. Alterados: index.html, sw.js, LEIA-ME.txt.
+
+Atualização v3 (final) – anexos e novos itens de EPI
+ - Todos os relatórios (todos os módulos): seção "Anexos do relatório" na tela do trabalho, com
+   Anexo A – Certificados de calibração dos instrumentos e Anexo B – ART do serviço. Aceita PDF (convertido
+   em imagens, página por página, no próprio aparelho) ou foto. As páginas entram no final do relatório PDF,
+   antes da contracapa, e aparecem no sumário. Os anexos vão no backup e são excluídos junto com o trabalho.
+ - Ensaios de EPI/EPC: "Ferramentas manuais isoladas (1000 V)" com aderência da isolação, quantidade ensaiada
+   e reprovada no lote; novo tipo "Ponta de prova / cabos de teste de multímetro" (IEC 61010-031): categoria
+   CAT, inspeção, continuidade (≤ 0,5 Ω) e isolamento (≥ 100 MΩ a 1000 V cc) – critérios adotados, ajustáveis.
+ - Arquivos novos: pdfjs/pdf.min.mjs, pdfjs/pdf.worker.min.mjs, pdfjs/LICENSE (criar a pasta "pdfjs" no GitHub).
