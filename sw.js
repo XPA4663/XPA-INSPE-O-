@@ -1,6 +1,6 @@
 /* XPA · Inspeções — service worker (funcionamento offline)
    Para publicar uma nova versão do app, altere o número em VERSION. */
-const VERSION = 'xpa-inspecoes-v3';
+const VERSION = 'xpa-inspecoes-v3.1';
 
 const LOCAL = [
   './',
@@ -33,7 +33,8 @@ const CDN = [
 self.addEventListener('install', (e) => {
   e.waitUntil((async () => {
     const c = await caches.open(VERSION);
-    await c.addAll(LOCAL);
+    // baixa um por um: um arquivo faltando no servidor não pode impedir a atualização do app
+    await Promise.all(LOCAL.map(u => fetch(u, { cache: 'reload' }).then(r => r.ok && c.put(u, r)).catch(() => {})));
     await Promise.all(CDN.map(u => fetch(u, { mode: 'cors' }).then(r => r.ok && c.put(u, r)).catch(() => {})));
     self.skipWaiting();
   })());
