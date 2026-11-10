@@ -507,13 +507,45 @@ function showStatus(){
   else if(PENDING) status(`${PENDING} pendente(s) de envio`,'err');
   else status('Salvo na conta','ok');
 }
-async function refreshPending(){ PENDING=(await idb.all('outbox')).length; showStatus(); }
+async function refreshPending(){ const ob=await idb.all('outbox'); PENDING=ob.length;
+  try{ const parts=[]; for(const [id,o] of ob.slice(0,8)){ const b=o.op==='del'?null:await idb.get('docs',id); parts.push(`${id}${o.op==='del'?' (exclusão)':b?' '+Math.round(JSON.stringify(b).length/1024)+' kB':' (sem dados locais)'}`); } DIAG.fila=parts.join(' · ')+(ob.length>8?` · +${ob.length-8}`:''); }catch(e){}
+  showStatus(); }
 function scheduleSync(){ clearTimeout(syncT); syncT=setTimeout(sync,1200); }
+/* Envio pela API REST do Firestore: cada envio é uma requisição própria, cancelável de verdade.
+   (O SDK mantinha na fila interna as gravações que estouravam o tempo; a cada nova tentativa
+   outra cópia das fotos era enfileirada e os itens seguintes nunca saíam.) */
+function fsVal(v){
+  if(v===null) return {nullValue:null};
+  if(typeof v==='boolean') return {booleanValue:v};
+  if(typeof v==='number'){ if(Number.isInteger(v)&&Math.abs(v)<=Number.MAX_SAFE_INTEGER) return {integerValue:String(v)}; return {doubleValue:Number.isFinite(v)?v:(Number.isNaN(v)?'NaN':(v>0?'Infinity':'-Infinity'))}; }
+  if(typeof v==='string') return {stringValue:v};
+  if(Array.isArray(v)) return {arrayValue:{values:v.filter(x=>x!==undefined&&typeof x!=='function').map(fsVal)}};
+  if(v instanceof Date) return {timestampValue:v.toISOString()};
+  if(typeof v==='object') return {mapValue:{fields:fsFields(v)}};
+  return {nullValue:null};
+}
+function fsFields(o){ const f={}; for(const [k,v] of Object.entries(o)){ if(v===undefined||typeof v==='function') continue; f[k]=fsVal(v); } return f; }
+const FS_COD={INVALID_ARGUMENT:'invalid-argument',PERMISSION_DENIED:'permission-denied',UNAUTHENTICATED:'unauthenticated',RESOURCE_EXHAUSTED:'resource-exhausted',NOT_FOUND:'not-found',UNAVAILABLE:'unavailable',DEADLINE_EXCEEDED:'timeout',ABORTED:'aborted',INTERNAL:'internal'};
+async function restWrite(id,metodo,body,ms){
+  const tok=await withTimeout(FBUSER.getIdToken(),15000);
+  const url=`https://firestore.googleapis.com/v1/projects/${FBCFG.projectId}/databases/(default)/documents/data/users/${UID}/${encodeURIComponent(id)}`;
+  const ac=new AbortController(); const t=setTimeout(()=>ac.abort(),ms);
+  let r;
+  try{ r=await fetch(url,{method:metodo,signal:ac.signal,headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},body:body?JSON.stringify({fields:fsFields(body)}):undefined}); }
+  catch(e){ throw {code:ac.signal.aborted?'timeout':'unavailable',message:ac.signal.aborted?'':String(e&&e.message||e)}; }
+  finally{ clearTimeout(t); }
+  if(r.ok) return true;
+  if(metodo==='DELETE'&&r.status===404) return true;
+  let j={}; try{ j=await r.json(); }catch(e){}
+  const st=(j.error&&j.error.status)||''; const msg=(j.error&&j.error.message)||('HTTP '+r.status);
+  throw {code:FS_COD[st]||(r.status===413?'invalid-argument':'erro-'+r.status),message:msg};
+}
 async function pushOne(id,op){
-  if(op==='del') return withTimeout(col().doc(id).delete(),15000);
+  if(op==='del') return restWrite(id,'DELETE',null,20000);
   const b=await localGet(id); if(!b) return;
-  const tam=(b.data&&b.data.length)||0; // fotos e páginas de anexo grandes precisam de mais tempo em rede móvel
-  return withTimeout(col().doc(id).set(b),Math.min(180000,30000+tam/8));
+  const tam=JSON.stringify(b).length;
+  if(tam>1040000) throw {code:'grande-demais',message:`documento com ${(tam/1048576).toFixed(2)} MB (limite 1 MB)`};
+  return restWrite(id,'PATCH',b,Math.min(240000,30000+tam/4)); // ~32 kB/s no pior caso de rede móvel
 }
 async function sync(){
   if(MODE!=='db'||SYNCING||!online()||!IDB){ showStatus(); return; }
@@ -526,8 +558,8 @@ async function sync(){
       catch(e){ const code=String((e&&e.code)||'erro').replace(/_/g,'-');
         DIAG.ultimoErro=`${code} em ${id} (${new Date().toLocaleTimeString('pt-BR')})${e&&e.message?' – '+String(e.message).slice(0,120):''}`;
         if(code==='resource-exhausted'||code==='quota-exceeded'){ toast('Espaço da conta cheio ou documento grande demais. Exclua inspeções antigas.'); break; }
-        if(code==='invalid-argument'){ await idb.del('outbox',id); continue; }
-        if(code==='permission-denied'){ continue; } // não trava a fila: tenta os demais itens
+        if(code==='invalid-argument'||code==='grande-demais'){ DIAG.descartados=(DIAG.descartados||[]).concat(id); continue; } // não apaga da fila: fica para análise, sem travar os demais
+        if(code==='permission-denied'||code==='timeout'){ continue; } // não trava a fila: tenta os demais itens
         break; }
     }
   } finally { SYNCING=false; await refreshPending(); }
@@ -742,7 +774,7 @@ function bindContaBarra(){
 <script>
 /* ======================= DIAGNÓSTICO ======================= */
 document.addEventListener('click',e=>{ if(e.target&&e.target.id==='sv'){
-  const t=`Login: ${FBCFG?(FBUSER?FBUSER.email:'sem conta'):'não configurado'}\nAmbiente: ${DIAG.runtime}\nBanco de dados: ${DIAG.db}\nUsuário: ${DIAG.user} (${DIAG.id})\nDownload de arquivos: ${DIAG.downloads}\nArmazenamento do aparelho: ${DIAG.local} · banco local: ${DIAG.idb}\nPendentes de envio: ${PENDING}${DIAG.ultimoErro?'\nÚltimo erro de envio: '+DIAG.ultimoErro:''}\nModo atual: ${MODE==='db'?'conta':MODE==='local'?'aparelho':'memória'}${DIAG.erro?'\nErro: '+DIAG.erro:''}`;
+  const t=`Login: ${FBCFG?(FBUSER?FBUSER.email:'sem conta'):'não configurado'}\nAmbiente: ${DIAG.runtime}\nBanco de dados: ${DIAG.db}\nUsuário: ${DIAG.user} (${DIAG.id})\nDownload de arquivos: ${DIAG.downloads}\nArmazenamento do aparelho: ${DIAG.local} · banco local: ${DIAG.idb}\nPendentes de envio: ${PENDING}${DIAG.fila?'\nFila: '+DIAG.fila:''}${DIAG.ultimoErro?'\nÚltimo erro de envio: '+DIAG.ultimoErro:''}${DIAG.descartados&&DIAG.descartados.length?'\nRecusados pelo servidor: '+DIAG.descartados.join(', '):''}\nModo atual: ${MODE==='db'?'conta':MODE==='local'?'aparelho':'memória'}${DIAG.erro?'\nErro: '+DIAG.erro:''}`;
   $('#mbox').innerHTML=`<p style="margin-top:0;font-weight:bold;color:var(--navy)">Diagnóstico de salvamento</p><pre style="white-space:pre-wrap;font-size:13px;background:var(--bg);padding:10px;border-radius:8px">${esc(t)}</pre><p class="note">Envie um print desta tela para o suporte.</p><div class="row" style="justify-content:flex-end"><button class="btn" id="mok">Fechar</button></div>`;
   $('#modal').classList.add('show'); $('#mok').onclick=()=>$('#modal').classList.remove('show');
 }});
