@@ -118,3 +118,38 @@ Atualização v3 (final) – anexos e novos itens de EPI
    e reprovada no lote; novo tipo "Ponta de prova / cabos de teste de multímetro" (IEC 61010-031): categoria
    CAT, inspeção, continuidade (≤ 0,5 Ω) e isolamento (≥ 100 MΩ a 1000 V cc) – critérios adotados, ajustáveis.
  - Arquivos novos: pdfjs/pdf.min.mjs, pdfjs/pdf.worker.min.mjs, pdfjs/LICENSE (criar a pasta "pdfjs" no GitHub).
+
+Atualização v4 – Ensaios completos na manutenção de subestação e OS compartilhada (trabalho em equipe)
+ 🔬 Novos ensaios por equipamento (Manutenção preventiva de subestação), com avaliação automática:
+   - Transformador: TTR por fase e tap, corrente de excitação, ôhmica BT, fator de potência (CH/CL/CHL),
+     buchas (FP e capacitância), cromatografia DGA (IEEE C57.104, TDCG) e físico-química do óleo (IEC 60422).
+   - Disjuntor: mínima tensão de operação das bobinas (70 % / 85 %), corrente das bobinas e do motor,
+     tempo de carregamento das molas, fator de potência dos polos, gás SF6 (pressão, ponto de orvalho,
+     pureza, decomposição) e integridade do vácuo (aprovado/reprovado por ampola).
+   - TC/TP: erro de relação por fase pela classe de exatidão, polaridade, curva de excitação (joelho),
+     resistência do secundário e carga (burden).
+   - Barramentos/cabos: VLF e tangente delta (IEEE 400.2).
+   - Aterramento: tensões de passo e toque x admissíveis, resistividade do solo (Wenner).
+ ☑️ Cada grupo de ensaio tem a caixa "Realizar": desmarque o que não será feito (com motivo opcional).
+   Ensaios desmarcados saem da avaliação e aparecem no relatório como "não realizados". Alguns são
+   desmarcados automaticamente quando não se aplicam (SF6 em disjuntor a vácuo, óleo em trafo a seco, etc.).
+ 👥 OS compartilhada: dentro do trabalho, "Compartilhar com a equipe" > e-mails das contas XPA dos técnicos.
+   - Todos registram checklist, ensaios e fotos ao mesmo tempo, cada um no seu celular, inclusive no
+     mesmo equipamento (cada campo é gravado separadamente). As alterações aparecem em tempo real.
+   - Sem internet, tudo fica no aparelho e é enviado quando a conexão voltar.
+   - Cada medição registra quem a executou e quando; o relatório traz a coluna "Executado por" e o
+     quadro "Ensaios executados" por técnico.
+   - O responsável (quem compartilhou) adiciona/remove técnicos e clica em "Finalizar manutenção":
+     o app lista as pendências, trava a OS para edição e gera o relatório único (PDF ou Excel).
+     "Reabrir OS" libera a edição de novo.
+   - Cada técnico precisa ter conta (Firebase Console > Authentication > Adicionar usuário).
+
+Arquivos novos/alterados nesta versão:
+  equipe.js (novo), index.html, mod-checklist.js, mod-se.js, sw.js (VERSION = xpa-inspecoes-v4),
+  firestore.rules, LEIA-ME.txt
+
+PASSO 1 – Regras do Firestore (obrigatório para a OS compartilhada)
+ - Firebase Console > Firestore Database > Regras > substitua pelo conteúdo de firestore.rules > Publicar.
+PASSO 2 – Publicar o app (GitHub)
+ - Add file > Upload files: os 7 arquivos acima > Commit changes.
+ - Abra o app com internet, feche e reabra para carregar a v4 (em todos os celulares da equipe).

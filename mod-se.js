@@ -371,12 +371,18 @@ const TIPOS={
   ],
   meds:[
    {g:'Resistência de isolamento (MΩ)', f:[['ri_atm','AT – massa'],['ri_atbt','AT – BT'],['ri_btm','BT – massa'],['ip','Índice de polarização (10 min / 1 min)'],['ri_temp','Temperatura do ensaio (°C)']], note:'Referência: NETA MTS Tab. 100.5 (a 20 °C) e IEEE C57.152. IP ≥ 1,25 bom; < 1,0 investigar.'},
-   {g:'Relação de transformação (TTR)', f:[['rel_desvio','Maior desvio em relação à nominal (%)']], note:'Desvio aceitável: ≤ 0,5 % (NBR 5356-1).'},
+   {g:'Relação de transformação (TTR)', f:[['ttr_tap','Tap ensaiado','txt'],['rel_r','Desvio fase R / H1 (%)'],['rel_s','Desvio fase S / H2 (%)'],['rel_t','Desvio fase T / H3 (%)'],['rel_desvio','Maior desvio de todos os taps (%)']], note:'Desvio aceitável: ≤ 0,5 % (NBR 5356-1). Informe o desvio por fase no tap nominal e o maior desvio encontrado nos demais taps.'},
+   {id:'exc', g:'Corrente de excitação (mA)', f:[['exc_v','Tensão de ensaio (kV)'],['exc_r','Fase R / H1'],['exc_s','Fase S / H2'],['exc_t','Fase T / H3']], note:'Padrão esperado: duas fases externas semelhantes e a central menor. Desvio entre as fases externas ≤ 10 % (IEEE C57.152 / NETA MTS – critério adotado).'},
    {g:'Resistência ôhmica dos enrolamentos AT (mΩ)', f:[['ro_r','Fase R'],['ro_s','Fase S'],['ro_t','Fase T']], note:'Desvio entre fases ≤ 2 % (NBR 5356-1 / NETA).'},
+   {id:'robt', g:'Resistência ôhmica dos enrolamentos BT (mΩ)', f:[['rob_r','Fase R'],['rob_s','Fase S'],['rob_t','Fase T']], note:'Desvio entre fases ≤ 2 % (NBR 5356-1 / NETA).'},
+   {id:'fp', g:'Fator de potência do isolamento – tan δ (%)', f:[['fp_ch','CH (AT – massa)'],['fp_cl','CL (BT – massa)'],['fp_chl','CHL (AT – BT)'],['fp_temp','Temperatura do ensaio (°C)']], note:'Valores corrigidos a 20 °C. Óleo: ≤ 0,5 % bom; 0,5 a 1,0 % atenção; > 1,0 % não conforme. Seco: ≤ 2,0 % bom; 2,0 a 3,0 % atenção (IEEE C57.152 – critério adotado).'},
+   {id:'buchas', g:'Buchas – fator de potência e capacitância', f:[['fpb_h1','FP bucha H1 (%)'],['fpb_h2','FP bucha H2 (%)'],['fpb_h3','FP bucha H3 (%)'],['cpb_h1','Desvio de capacitância H1 x placa (%)'],['cpb_h2','Desvio de capacitância H2 x placa (%)'],['cpb_h3','Desvio de capacitância H3 x placa (%)']], note:'Buchas capacitivas (C1). FP ≤ 0,5 % bom; até 1,0 % atenção; > 1,0 % não conforme. Capacitância: desvio ≤ 5 % bom; até 10 % atenção; > 10 % não conforme (IEEE C57.19.100 / NETA MTS – critério adotado).'},
+   {id:'dga', quando:d=>d.isol!=='Seco', naMotivo:'Não se aplica: transformador a seco', g:'Cromatografia do óleo – gases dissolvidos (ppm)', f:[['g_h2','Hidrogênio (H2)'],['g_ch4','Metano (CH4)'],['g_c2h6','Etano (C2H6)'],['g_c2h4','Etileno (C2H4)'],['g_c2h2','Acetileno (C2H2)'],['g_co','Monóxido de carbono (CO)'],['g_co2','Dióxido de carbono (CO2)'],['dga_lab','Laboratório / nº do laudo','txt']], note:'IEEE C57.104 – limites da Condição 1 (normal): H2 100 · CH4 120 · C2H6 65 · C2H4 50 · C2H2 1 · CO 350 · CO2 2500 · TDCG 720 ppm. Acima da Condição 2: não conforme.'},
+   {id:'fq', quando:d=>d.isol!=='Seco', naMotivo:'Não se aplica: transformador a seco', g:'Óleo isolante – análise físico-química', f:[['oq_agua','Teor de água (ppm)'],['oq_acid','Índice de neutralização (mg KOH/g)'],['oq_tif','Tensão interfacial (mN/m)'],['oq_fp90','Fator de perdas a 90 °C (%)'],['oq_cor','Cor (ASTM)','txt'],['oq_lab','Laboratório / nº do laudo','txt']], note:'Critério adotado (IEC 60422 / NBR 10576, equipamentos até 72,5 kV): água ≤ 30 ppm; acidez ≤ 0,15 mg KOH/g; tensão interfacial ≥ 28 mN/m; fator de perdas a 90 °C ≤ 10 %.'},
    {g:'Óleo isolante e temperaturas', f:[['rig','Rigidez dielétrica do óleo (kV)'],['t_oleo','Temperatura do óleo (°C)'],['t_enr','Temperatura do enrolamento (°C)']], note:'Rigidez: ≥ 40 kV bom; 30–40 kV atenção; < 30 kV não conforme (NBR 10576 / IEC 60422, ≤ 72,5 kV). Elevação do óleo ≤ 55 K.'},
   ]},
  DJ:{nome:'Disjuntor MT/AT', grupo:'MT/AT', icone:'🔌',
-  campos:[['un','Tensão nominal (kV)'],['in','Corrente nominal (A)'],['meio','Meio de extinção',['SF6','Vácuo','Óleo','Ar']],['nop','Nº de operações (contador)'],['rc_ref','Resist. de contato de referência do fabricante (µΩ)'],['tab_ref','Tempo de abertura máx. do fabricante (ms)'],['tfe_ref','Tempo de fechamento máx. do fabricante (ms)']],
+  campos:[['un','Tensão nominal (kV)'],['in','Corrente nominal (A)'],['meio','Meio de extinção',['SF6','Vácuo','Óleo','Ar']],['nop','Nº de operações (contador)'],['rc_ref','Resist. de contato de referência do fabricante (µΩ)'],['tab_ref','Tempo de abertura máx. do fabricante (ms)'],['tfe_ref','Tempo de fechamento máx. do fabricante (ms)'],['vaux','Tensão de comando (Vcc)'],['p_ref','Pressão nominal de SF6 a 20 °C (bar)']],
   items:[
    ['geral','Estado geral, limpeza de isoladores e câmaras','NBR IEC 62271-100','C'],
    ['gas','Pressão/densidade de SF6 ou indicador de vácuo dentro da faixa','Fabricante','A'],
@@ -394,6 +400,11 @@ const TIPOS={
    {g:'Resistência de isolamento (MΩ)', f:[['ri_r','Polo R (aberto, entre terminais)'],['ri_s','Polo S'],['ri_t','Polo T'],['ri_m','Fase – massa (fechado)']], note:'Mínimo conforme NETA MTS Tab. 100.1 pela tensão nominal.'},
    {g:'Resistência de contato (µΩ)', f:[['rc_r','Polo R'],['rc_s','Polo S'],['rc_t','Polo T']], note:'Comparar ao fabricante; desvio entre polos ≤ 50 % do menor valor (NETA MTS).'},
    {g:'Tempos de operação (ms)', f:[['tab_r','Abertura R'],['tab_s','Abertura S'],['tab_t','Abertura T'],['tfe_r','Fechamento R'],['tfe_s','Fechamento S'],['tfe_t','Fechamento T']], note:'Simultaneidade entre polos: ≤ 2,8 ms na abertura (1/6 ciclo) e ≤ 4,2 ms no fechamento (1/4 ciclo), 60 Hz.'},
+   {id:'vmin', g:'Mínima tensão de operação das bobinas (Vcc)', f:[['vmin_ab','Bobina de abertura'],['vmin_ab2','2ª bobina de abertura (se houver)'],['vmin_fe','Bobina de fechamento']], note:'Deve operar com até 70 % (abertura) e 85 % (fechamento) da tensão de comando; a abertura não deve operar abaixo de 30 % (NBR IEC 62271-1). Informe a tensão de comando nos dados do equipamento.'},
+   {id:'bob', g:'Corrente das bobinas e do motor', f:[['ib_ab','Corrente da bobina de abertura (A)'],['ib_fe','Corrente da bobina de fechamento (A)'],['i_mot','Corrente de partida do motor (A)'],['t_mola','Tempo de carregamento das molas (s)']], note:'Comparar com o fabricante e com o histórico. Carregamento das molas ≤ 15 s (critério adotado).'},
+   {id:'fpdj', g:'Fator de potência / tan δ dos polos (%)', f:[['fpd_r','Polo R'],['fpd_s','Polo S'],['fpd_t','Polo T']], note:'Comparar entre polos, com o fabricante e com o histórico. Desvio entre polos > 50 %: investigar (critério adotado).'},
+   {id:'sf6', quando:d=>d.meio==='SF6', naMotivo:'Não se aplica: meio de extinção diferente de SF6', g:'Gás SF6', f:[['sf6_p','Pressão a 20 °C (bar)'],['sf6_po','Ponto de orvalho (°C)'],['sf6_pur','Pureza (%)'],['sf6_so2','Produtos de decomposição – SO2 + SOF2 (ppmv)']], note:'Pressão ≥ nominal do fabricante; ponto de orvalho ≤ −5 °C à pressão nominal; pureza ≥ 97 %; produtos de decomposição ≤ 12 ppmv (IEC 60480 / NBR IEC 62271-1 – critérios adotados).'},
+   {id:'vac', quando:d=>d.meio==='Vácuo', naMotivo:'Não se aplica: meio de extinção diferente de vácuo', g:'Integridade do vácuo – tensão aplicada', f:[['vac_kv','Tensão aplicada (kV)'],['vac_dur','Duração (s)'],['vac_r','Ampola polo R',['','Aprovado','Reprovado']],['vac_s','Ampola polo S',['','Aprovado','Reprovado']],['vac_t','Ampola polo T',['','Aprovado','Reprovado']]], note:'Contatos abertos, tensão e duração conforme o fabricante. Reprovado = descarga disruptiva ou corrente acima do limite.'},
   ]},
  SC:{nome:'Seccionadora / chave MT', grupo:'MT/AT', icone:'🔀',
   campos:[['un','Tensão nominal (kV)'],['in','Corrente nominal (A)'],['tipo','Tipo',['Seccionadora tripolar','Chave fusível','Chave faca','Religador','Chave de aterramento']],['rc_ref','Resist. de contato de referência (µΩ)']],
@@ -424,7 +435,7 @@ const TIPOS={
    {g:'Resistência de isolamento (MΩ)', f:[['ri_r','Fase R'],['ri_s','Fase S'],['ri_t','Fase T']], note:'Referência: ≥ 1000 MΩ.'},
   ]},
  TI:{nome:'TC / TP (instrumentos)', grupo:'MT/AT', icone:'📐',
-  campos:[['un','Tensão nominal (kV)'],['tipo','Tipo',['TC','TP','TC + TP']],['rel','Relação nominal']],
+  campos:[['un','Tensão nominal (kV)'],['tipo','Tipo',['TC','TP','TC + TP']],['rel','Relação nominal'],['classe','Classe de exatidão (ex.: 0,3C25 · 10P20)'],['vk_ref','Tensão de joelho do fabricante (V)'],['burden_nom','Carga nominal (VA)']],
   items:[
    ['isol','Isolação externa: trincas, sujidade','NBR 6856 / 6855','A'],
    ['fix','Fixação e terminais do primário','NETA MTS','B'],
@@ -436,6 +447,10 @@ const TIPOS={
   meds:[
    {g:'Resistência de isolamento (MΩ)', f:[['ri_pm','Primário – massa'],['ri_ps','Primário – secundário'],['ri_sm','Secundário – massa']], note:'Mínimo conforme NETA MTS Tab. 100.5 (seco).'},
    {g:'Relação', f:[['rel_desvio','Maior desvio da relação nominal (%)']], note:'TP: ≤ 0,5 %. TC: conforme classe de exatidão.'},
+   {id:'relpol', g:'Relação e polaridade por fase', f:[['relf_r','Erro de relação fase R (%)'],['relf_s','Erro de relação fase S (%)'],['relf_t','Erro de relação fase T (%)'],['pol','Polaridade',['','Correta (subtrativa)','Invertida']]], note:'Limite pela classe de exatidão: 0,3 / 0,6 / 1,2 % (medição); 5P = 1 % e 10P = 3 % (proteção). Sem classe informada: 0,5 %.'},
+   {id:'excit', quando:d=>d.tipo!=='TP', naMotivo:'Não se aplica: TP', g:'Curva de excitação (saturação) do TC', f:[['vk','Tensão de joelho medida (V)'],['ik','Corrente no joelho (mA)']], note:'Joelho dentro de ± 10 % da curva do fabricante (NETA MTS – critério adotado). Anexe a foto da curva em "Outras fotos".'},
+   {id:'rsec', quando:d=>d.tipo!=='TP', naMotivo:'Não se aplica: TP', g:'Resistência ôhmica do secundário (Ω)', f:[['rs_r','Fase R'],['rs_s','Fase S'],['rs_t','Fase T']], note:'TCs iguais: desvio entre fases ≤ 5 % bom; até 10 % atenção.'},
+   {id:'burden', g:'Carga (burden) do circuito secundário', f:[['burden','Carga medida (VA)']], note:'Deve ser menor ou igual à carga nominal do TC/TP.'},
   ]},
  BM:{nome:'Barramentos, cabos e muflas MT', grupo:'MT/AT', icone:'➖',
   campos:[['un','Tensão nominal (kV)'],['in','Corrente nominal (A)'],['desc','Descrição (trecho / cubículo)']],
@@ -451,6 +466,7 @@ const TIPOS={
   ],
   meds:[
    {g:'Resistência de isolamento fase – terra (MΩ)', f:[['ri_r','Fase R'],['ri_s','Fase S'],['ri_t','Fase T']], note:'Mínimo conforme NETA MTS Tab. 100.1 pela tensão nominal.'},
+   {id:'vlf', g:'Ensaio VLF e tangente delta (cabos)', f:[['vlf_isol','Isolação do cabo',['XLPE / PE','EPR','PILC (papel-óleo)']],['vlf_kv','Tensão suportável aplicada (kV rms)'],['vlf_min','Duração (min)'],['vlf_res','Tensão suportável',['','Aprovado (sem ruptura)','Reprovado (ruptura)']],['td_r','TD médio em U0 – fase R (×10⁻³)'],['td_s','TD médio em U0 – fase S (×10⁻³)'],['td_t','TD médio em U0 – fase T (×10⁻³)'],['dtd','Maior ΔTD 1,5 U0 – 0,5 U0 (×10⁻³)']], note:'Critérios da IEEE 400.2. Para o ensaio completo por fase (0,5 / 1,0 / 1,5 U0, estabilidade e gráficos), use o módulo "Ensaio VLF e tangente delta".'},
   ]},
  QB:{nome:'Cubículo BT / QGBT / painel', grupo:'BT', icone:'🗄️',
   campos:[['un','Tensão nominal (kV)','','0,38'],['in','Corrente nominal do geral (A)'],['desc','Descrição (QGBT, QD, CCM…)']],
@@ -489,7 +505,7 @@ const TIPOS={
    {g:'Teste funcional', f:[['t_trip','Tempo de atuação medido (ms)'],['t_ref','Tempo esperado (ms)']], note:'Tempo medido até 10 % acima do esperado: conforme.'},
   ]},
  AT:{nome:'Aterramento e SPDA da subestação', grupo:'Aterramento', icone:'🌍',
-  campos:[['desc','Descrição (malha, hastes, SPDA)'],['r_ref','Resistência máxima de projeto (Ω)','','10']],
+  campos:[['desc','Descrição (malha, hastes, SPDA)'],['r_ref','Resistência máxima de projeto (Ω)','','10'],['vp_adm','Tensão de passo admissível (V)'],['vt_adm','Tensão de toque admissível (V)']],
   items:[
    ['conex','Conexões visíveis da malha (soldas, conectores)','NBR 15751','B'],
    ['cont','Continuidade de cercas, portões e estruturas metálicas','NBR 15751','A'],
@@ -500,6 +516,8 @@ const TIPOS={
   ],
   meds:[
    {g:'Medições', f:[['r_malha','Resistência da malha (Ω)'],['r_cont','Maior resistência de continuidade (Ω)']], note:'Malha: conforme até o valor de projeto; até 2× atenção. Continuidade ≤ 1 Ω.'},
+   {id:'passo', g:'Tensões de passo e toque (V)', f:[['vp_max','Maior tensão de passo (V)'],['vt_max','Maior tensão de toque (V)'],['i_inj','Corrente injetada (A)'],['i_falta','Corrente de falta de projeto (kA)']], note:'Valores referidos à corrente de falta de projeto e comparados aos admissíveis calculados (NBR 15751 / IEEE 80). Informe os admissíveis nos dados do equipamento.'},
+   {id:'rho', g:'Resistividade do solo – Wenner (Ω·m)', f:[['rho_2','a = 2 m'],['rho_4','a = 4 m'],['rho_8','a = 8 m'],['rho_16','a = 16 m']], note:'Método de Wenner (NBR 7117). Registro para o projeto e o histórico.'},
   ]},
  CG:{nome:'Civil, segurança e documentação', grupo:'Geral', icone:'🏗️',
   campos:[['desc','Descrição']],
@@ -595,6 +613,58 @@ function avaliarMeds(e,h){
   if(e.tipo==='AT'){
     const r=v('r_malha'), ref=num(d.r_ref)||10; if(r!==null) add('Resistência da malha',r,'Ω',{st:r<=ref?'ok':r<=ref*2?'att':'nc',lim:'≤ '+fmtN(ref)+' Ω'});
     const c=v('r_cont'); if(c!==null) add('Continuidade',c,'Ω',{st:c<=1?'ok':c<=2?'att':'nc',lim:'≤ 1 Ω'});
+    const vp=v('vp_max'), vpa=num(d.vp_adm); if(vp!==null) add('Tensão de passo (máx.)',vp,'V',vpa!==null?{st:vp<=vpa?'ok':'nc',lim:'≤ '+fmtN(vpa)+' V (admissível)'}:null);
+    const vt=v('vt_max'), vta=num(d.vt_adm); if(vt!==null) add('Tensão de toque (máx.)',vt,'V',vta!==null?{st:vt<=vta?'ok':'nc',lim:'≤ '+fmtN(vta)+' V (admissível)'}:null);
+    const rh=[['rho_2','2'],['rho_4','4'],['rho_8','8'],['rho_16','16']].filter(([k])=>v(k)!==null); if(rh.length) add('Resistividade do solo (Wenner)',null,'',null,true), out[out.length-1].val=rh.map(([k,a])=>`a=${a} m: ${fmtN(v(k))}`).join(' · ')+' Ω·m';
+  }
+  /* ---- ensaios complementares (v4) ---- */
+  const faixa3=(x,a,b)=>x===null?null:(x<=a?'ok':x<=b?'att':'nc');
+  const pctDiff=(a,b)=>(a===null||b===null||Math.min(a,b)<=0)?null:Math.abs(a-b)/Math.min(a,b)*100;
+  if(e.tipo==='TR'){
+    [['rel_r','R'],['rel_s','S'],['rel_t','T']].forEach(([k,f])=>{ const x=v(k); if(x!==null) add('Desvio da relação (TTR) fase '+f+(m.ttr_tap?' – tap '+m.ttr_tap:''),x,'%',{st:Math.abs(x)<=0.5?'ok':Math.abs(x)<=1?'att':'nc',lim:'≤ 0,5 %'}); });
+    const ex=pctDiff(v('exc_r'),v('exc_t')); if(ex!==null) add('Corrente de excitação – desvio entre fases externas',ex,'%',{st:faixa3(ex,10,15),lim:'≤ 10 %'});
+    const exs=v('exc_s'), exo=[v('exc_r'),v('exc_t')].filter(x=>x!==null); if(exs!==null&&exo.length&&exs>Math.max(...exo)) add('Corrente de excitação – fase central maior que as externas',exs,'mA',{st:'att',lim:'central < externas'});
+    const rb=desvioPct([v('rob_r'),v('rob_s'),v('rob_t')]); if(rb!==null) add('Desvio da resist. ôhmica BT entre fases',rb,'%',{st:rb<=2?'ok':rb<=3?'att':'nc',lim:'≤ 2 %'});
+    const seco=d.isol==='Seco', fl=seco?[2,3]:[0.5,1];
+    [['fp_ch','CH'],['fp_cl','CL'],['fp_chl','CHL']].forEach(([k,l])=>{ const x=v(k); if(x!==null) add('Fator de potência '+l+' (20 °C)',x,'%',{st:faixa3(x,fl[0],fl[1]),lim:'≤ '+fmtN(fl[0])+' %'}); });
+    ['h1','h2','h3'].forEach(b=>{ const B=b.toUpperCase(); const f=v('fpb_'+b); if(f!==null) add('FP bucha '+B,f,'%',{st:faixa3(f,0.5,1),lim:'≤ 0,5 %'}); const c=v('cpb_'+b); if(c!==null) add('Desvio de capacitância bucha '+B,c,'%',{st:faixa3(Math.abs(c),5,10),lim:'≤ 5 %'}); });
+    const GAS=[['g_h2','H2',100,700],['g_ch4','CH4',120,400],['g_c2h6','C2H6',65,100],['g_c2h4','C2H4',50,100],['g_c2h2','C2H2',1,9],['g_co','CO',350,570],['g_co2','CO2',2500,4000]];
+    let tdcg=0, nt=0; GAS.forEach(([k,l,c1,c2])=>{ const x=v(k); if(x===null) return; if(k!=='g_co2'){ tdcg+=x; nt++; } add('DGA – '+l,x,'ppm',{st:faixa3(x,c1,c2),lim:'≤ '+fmtN(c1)+' ppm (Cond. 1)'}); });
+    if(nt>=3) add('DGA – TDCG (gases combustíveis)',tdcg,'ppm',{st:faixa3(tdcg,720,1920),lim:'≤ 720 ppm (Cond. 1)'});
+    const ag=v('oq_agua'); if(ag!==null) add('Teor de água no óleo',ag,'ppm',{st:faixa3(ag,30,40),lim:'≤ 30 ppm'});
+    const ac=v('oq_acid'); if(ac!==null) add('Índice de neutralização',ac,'mg KOH/g',{st:faixa3(ac,0.15,0.30),lim:'≤ 0,15'});
+    const tf=v('oq_tif'); if(tf!==null) add('Tensão interfacial',tf,'mN/m',{st:tf>=28?'ok':tf>=22?'att':'nc',lim:'≥ 28 mN/m'});
+    const f9=v('oq_fp90'); if(f9!==null) add('Fator de perdas a 90 °C',f9,'%',{st:faixa3(f9,10,50),lim:'≤ 10 %'});
+  }
+  if(e.tipo==='DJ'){
+    const va=num(d.vaux);
+    [['vmin_ab','Mín. tensão – bobina de abertura',70,true],['vmin_ab2','Mín. tensão – 2ª bobina de abertura',70,true],['vmin_fe','Mín. tensão – bobina de fechamento',85,false]].forEach(([k,l,lim,ab])=>{ const x=v(k); if(x===null) return;
+      if(!va){ add(l,x,'Vcc',null); return; } const p=x/va*100; add(l+` (${f1(p,0)} % de Vn)`,x,'Vcc',{st:p>lim?'nc':(ab&&p<30)?'att':'ok',lim:(ab?'30 a ':'≤ ')+lim+' % de '+fmtN(va)+' V'}); });
+    const tm=v('t_mola'); if(tm!==null) add('Tempo de carregamento das molas',tm,'s',{st:tm<=15?'ok':tm<=20?'att':'nc',lim:'≤ 15 s'});
+    [['ib_ab','Corrente da bobina de abertura','A'],['ib_fe','Corrente da bobina de fechamento','A'],['i_mot','Corrente de partida do motor','A']].forEach(([k,l,u])=>{ const x=v(k); if(x!==null) add(l,x,u,null); });
+    const fp=[v('fpd_r'),v('fpd_s'),v('fpd_t')]; fp.forEach((x,i)=>{ if(x!==null) add('Fator de potência polo '+'RST'[i],x,'%',null); });
+    const fd=desvioPct(fp); if(fd!==null) add('Fator de potência – desvio entre polos',fd,'%',{st:fd<=50?'ok':'att',lim:'≤ 50 %'});
+    const sp=v('sf6_p'), pr=num(d.p_ref); if(sp!==null) add('Pressão de SF6 (20 °C)',sp,'bar',pr!==null?{st:sp>=pr?'ok':sp>=pr*0.95?'att':'nc',lim:'≥ '+fmtN(pr)+' bar'}:null);
+    const po=v('sf6_po'); if(po!==null) add('SF6 – ponto de orvalho',po,'°C',{st:po<=-5?'ok':'nc',lim:'≤ −5 °C'});
+    const pu=v('sf6_pur'); if(pu!==null) add('SF6 – pureza',pu,'%',{st:pu>=97?'ok':pu>=95?'att':'nc',lim:'≥ 97 %'});
+    const so=v('sf6_so2'); if(so!==null) add('SF6 – produtos de decomposição',so,'ppmv',{st:so<=12?'ok':so<=50?'att':'nc',lim:'≤ 12 ppmv'});
+    [['vac_r','R'],['vac_s','S'],['vac_t','T']].forEach(([k,f])=>{ const r=m[k]; if(!r) return; out.push({label:'Integridade do vácuo – ampola '+f+(num(m.vac_kv)!==null?` (${fmtN(num(m.vac_kv))} kV)`:''), val:r, lim:'Sem descarga', st:r==='Aprovado'?'ok':'nc'}); });
+  }
+  if(e.tipo==='TI'){
+    const cl=String(d.classe||''); let lim=0.5; const mp=cl.match(/(\d+)\s*P/i), mn=cl.match(/^\s*(\d+(?:[.,]\d+)?)/);
+    if(mp) lim=+mp[1]>=10?3:1; else if(mn) lim=num(mn[1])||0.5;
+    [['relf_r','R'],['relf_s','S'],['relf_t','T']].forEach(([k,f])=>{ const x=v(k); if(x!==null) add('Erro de relação fase '+f,x,'%',{st:Math.abs(x)<=lim?'ok':Math.abs(x)<=lim*1.5?'att':'nc',lim:'≤ '+fmtN(lim)+' %'+(cl?' (classe '+cl+')':'')}); });
+    if(m.pol) out.push({label:'Polaridade', val:m.pol, lim:'Subtrativa', st:/Correta/.test(m.pol)?'ok':'nc'});
+    const vk=v('vk'), vr=num(d.vk_ref); if(vk!==null){ if(vr){ const p=(vk-vr)/vr*100; add('Tensão de joelho (desvio '+f1(p,1)+' %)',vk,'V',{st:Math.abs(p)<=10?'ok':Math.abs(p)<=20?'att':'nc',lim:'± 10 % de '+fmtN(vr)+' V'}); } else add('Tensão de joelho',vk,'V',null); }
+    const rs=desvioPct([v('rs_r'),v('rs_s'),v('rs_t')]); if(rs!==null) add('Resist. do secundário – desvio entre fases',rs,'%',{st:faixa3(rs,5,10),lim:'≤ 5 %'});
+    const bu=v('burden'), bn=num(d.burden_nom); if(bu!==null) add('Carga do secundário',bu,'VA',bn?{st:bu<=bn?'ok':'nc',lim:'≤ '+fmtN(bn)+' VA'}:null);
+  }
+  if(e.tipo==='BM'){
+    const isol=m.vlf_isol||'XLPE / PE'; const C={'XLPE / PE':{td:[4,50],dtd:[5,80]},'EPR':{td:[35,120],dtd:[5,100]}}[isol];
+    const ev3=(x,[a,b])=>x<a?'ok':x<=b?'att':'nc';
+    [['td_r','R'],['td_s','S'],['td_t','T']].forEach(([k,f])=>{ const x=v(k); if(x!==null) add('TD médio em U0 – fase '+f,x,'×10⁻³',C?{st:ev3(x,C.td),lim:'< '+fmtN(C.td[0])+' (ação > '+fmtN(C.td[1])+')'}:{st:null,lim:'comparativo (PILC)'}); });
+    const dt=v('dtd'); if(dt!==null) add('ΔTD (1,5 U0 – 0,5 U0)',dt,'×10⁻³',C?{st:ev3(dt,C.dtd),lim:'< '+fmtN(C.dtd[0])+' (ação > '+fmtN(C.dtd[1])+')'}:{st:null,lim:'comparativo (PILC)'});
+    if(m.vlf_res) out.push({label:'Tensão suportável VLF'+(num(m.vlf_kv)!==null?` (${fmtN(num(m.vlf_kv))} kV${num(m.vlf_min)!==null?' · '+fmtN(num(m.vlf_min))+' min':''})`:''), val:m.vlf_res.replace(/ \(.*\)/,''), lim:'Sem ruptura', st:/Aprovado/.test(m.vlf_res)?'ok':'nc'});
   }
   return out;
 }
@@ -611,6 +681,13 @@ const NORMAS_SE=[
   ['ANSI/NETA MTS', 'Especificação para ensaios de manutenção de equipamentos e sistemas elétricos de potência (Tabelas 100.1 e 100.5)'],
   ['IEEE C57.152 / IEEE 43', 'Diagnóstico de transformadores e resistência de isolamento (IP/DAR)'],
   ['IEC 60255-151 / IEEE C37.112', 'Relés de proteção – características de sobrecorrente de tempo inverso'],
+  ['IEEE C57.104 / IEC 60599', 'Interpretação de gases dissolvidos no óleo de transformadores (cromatografia – DGA)'],
+  ['IEC 60422', 'Óleo mineral isolante em equipamentos elétricos – supervisão e manutenção (análise físico-química)'],
+  ['IEEE C57.19.100', 'Buchas de equipamentos de potência – aplicação e ensaios de fator de potência e capacitância'],
+  ['ABNT NBR IEC 62271-1 / IEC 60480', 'Especificações comuns de manobra (tensões de comando) e qualidade do gás SF6'],
+  ['ABNT NBR 6856 / 6855', 'Transformadores de corrente e de potencial – relação, polaridade e excitação'],
+  ['IEEE 400.2', 'Ensaios em campo de cabos com tensão VLF – tensão suportável e tangente delta'],
+  ['ABNT NBR 7117 / IEEE 80', 'Resistividade do solo (Wenner) e tensões de passo e toque'],
   ['NR-10', 'Segurança em instalações e serviços em eletricidade'],
   ['PRODIST Módulo 8', 'Qualidade da energia – desequilíbrio de tensão'],
 ];
@@ -622,7 +699,14 @@ const CRITERIOS_SE=[
   ['Resistência de contato','Comparada ao fabricante; desvio entre polos ≤ 50 % do menor valor (NETA MTS).'],
   ['Tempos de disjuntor','Dentro do fabricante; simultaneidade ≤ 2,8 ms (abertura) e ≤ 4,2 ms (fechamento).'],
   ['Óleo isolante','Rigidez ≥ 40 kV bom; 30–40 kV atenção; < 30 kV não conforme (NBR 10576 / IEC 60422).'],
-  ['Aterramento','Resistência da malha ≤ valor de projeto (padrão 10 Ω); continuidade ≤ 1 Ω.'],
+  ['Aterramento','Resistência da malha ≤ valor de projeto (padrão 10 Ω); continuidade ≤ 1 Ω; tensões de passo e toque ≤ admissíveis calculados (NBR 15751 / IEEE 80).'],
+  ['Fator de potência (transformador)','Corrigido a 20 °C: óleo ≤ 0,5 % (atenção até 1,0 %); seco ≤ 2,0 % (atenção até 3,0 %). Buchas: FP ≤ 0,5 %, capacitância ± 5 % da placa.'],
+  ['Corrente de excitação','Desvio entre as fases externas ≤ 10 %; fase central menor que as externas.'],
+  ['Cromatografia (DGA)','IEEE C57.104 – até a Condição 1: conforme; Condição 2: atenção; acima: não conforme. TDCG ≤ 720 ppm.'],
+  ['Físico-química do óleo','Água ≤ 30 ppm; acidez ≤ 0,15 mg KOH/g; tensão interfacial ≥ 28 mN/m; fator de perdas a 90 °C ≤ 10 % (IEC 60422, até 72,5 kV).'],
+  ['Disjuntor – bobinas e SF6','Operação com até 70 % (abertura) e 85 % (fechamento) da tensão de comando; molas ≤ 15 s; SF6: pressão ≥ nominal, ponto de orvalho ≤ −5 °C, pureza ≥ 97 %, decomposição ≤ 12 ppmv; vácuo: sem descarga.'],
+  ['TC / TP','Erro de relação pela classe de exatidão; polaridade subtrativa; joelho ± 10 % do fabricante; carga ≤ nominal.'],
+  ['Cabos – VLF / tan δ','IEEE 400.2: XLPE TD em U0 < 4 ×10⁻³ (ação > 50); EPR < 35 (ação > 120); ΔTD < 5 ×10⁻³.'],
   ['Painéis BT','Desequilíbrio de tensão ≤ 2 %; de corrente ≤ 10 %; carregamento ≤ 80 % da nominal.'],
   ['Relés – partida','Erro do pickup em relação ao ajuste ≤ tolerância de partida (padrão 5 %).'],
   ['Relés – tempo','|t medido − t teórico| ≤ maior entre 5 % e 40 ms (curvas IEC 60255-151 / IEEE C37.112 e tempo definido).'],
@@ -673,7 +757,7 @@ criarModuloChecklist({
       'Para cada equipamento foram aplicados um checklist de inspeção visual e funcional, as medições e ensaios aplicáveis, com registro fotográfico antes e depois da intervenção. Cada item foi classificado como Conforme, Atenção, Não conforme ou Não se aplica, e cada não conformidade recebeu uma severidade: A – urgente, B – programar ou C – observação.'],
     metodologia:['Planejamento da intervenção com o cliente, análise de risco, permissão de trabalho e aplicação das medidas de controle da NR-10 (desligamento, impedimento de reenergização, constatação de ausência de tensão, aterramento temporário, sinalização).',
       'Inspeção visual e funcional, limpeza, reaperto com torque, lubrificação e substituição de consumíveis conforme recomendações dos fabricantes.',
-      'Medições e ensaios com instrumentos calibrados: resistência de isolamento, resistência de contato, relação de transformação, resistência ôhmica, tempos de operação, rigidez dielétrica do óleo, resistência de aterramento e grandezas elétricas em BT, conforme aplicável a cada equipamento.',
+      'Medições e ensaios com instrumentos calibrados: resistência de isolamento, resistência de contato, relação de transformação, resistência ôhmica, tempos de operação, mínima tensão de operação das bobinas, fator de potência (tan δ) de enrolamentos e buchas, corrente de excitação, cromatografia e físico-química do óleo, qualidade do SF6, integridade do vácuo, excitação e polaridade de TCs, VLF/tan δ em cabos, rigidez dielétrica do óleo, resistência de aterramento, tensões de passo e toque e grandezas elétricas em BT, conforme aplicável a cada equipamento. Os ensaios não previstos para um equipamento são indicados como "não realizados" na respectiva ficha.',
       'Registro fotográfico antes e depois dos serviços, testes funcionais e liberação da instalação para reenergização acompanhada pelo cliente.'],
     limitacoes:'As avaliações refletem as condições encontradas na data da manutenção. Valores de resistência de isolamento dependem da temperatura e da umidade e devem ser comparados ao histórico do equipamento. Componentes internos não acessíveis sem desmontagem e ensaios não contratados não fazem parte deste escopo.',
   },
@@ -690,7 +774,7 @@ criarModuloChecklist({
   assinLinha:(h)=>h.equipe?`Inspetor(es): ${h.equipe}`:'',
   tx:{ dadosSec:'Dados da inspeção', antes:'Foto geral', depois:'Detalhe', outras:'Outras fotos',
     titulo:'Relatório de Inspeção Visual – Subestação', arquivo:'Relatorio_Inspecao_Visual_Subestacao', capa1:'Inspeção Visual', capa2:'Subestação de Energia', xlsTitulo:'INSPEÇÃO VISUAL – SUBESTAÇÃO',
-    condSec:'Condições da inspeção', normas:NORMAS_SE.filter(n=>!/10576|62271|C57/.test(n[0])), criterios:[],
+    condSec:'Condições da inspeção', normas:NORMAS_SE.filter(n=>!/10576|62271|C57|60422|6856|400\.2|7117/.test(n[0])), criterios:[],
     objetivo:['Este relatório apresenta o resultado da inspeção visual realizada na subestação indicada, sem desligamento e sem ensaios elétricos, com o objetivo de verificar as condições aparentes dos equipamentos de alta, média e baixa tensão, da proteção, do aterramento e dos aspectos civis e de segurança, identificando desvios que exijam manutenção corretiva ou programação de parada.',
       'Cada item do checklist foi classificado como Conforme, Atenção, Não conforme ou Não se aplica, com severidade A – urgente, B – programar ou C – observação para as não conformidades, e registro fotográfico das constatações.'],
     metodologia:['Inspeção externa com a instalação energizada, respeitando as distâncias de segurança e as zonas controlada e de risco da NR-10, sem abertura de painéis energizados sem autorização da operação.',

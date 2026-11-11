@@ -135,7 +135,11 @@ const $=(s)=>document.querySelector(s);
 const esc=(s)=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function toast(m){ const t=$('#toast'); t.textContent=m; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',3200); }
 let saveT=null;
-function saveCur(){ if(!CUR) return; CUR.updatedAt=Date.now(); clearTimeout(saveT); saveT=setTimeout(()=>writeDoc(CUR.id, JSON.parse(JSON.stringify(CUR))),700); }
+let saveFn=null;
+function saveCur(){ if(!CUR) return; const job=CUR; job.updatedAt=Date.now(); clearTimeout(saveT);
+  saveFn=()=>{ saveFn=null; saveT=null; if(job.shared&&window.equipeSave) return equipeSave(job); return writeDoc(job.id, JSON.parse(JSON.stringify(job))); };
+  saveT=setTimeout(()=>saveFn&&saveFn(),700); }
+function flushSave(){ clearTimeout(saveT); if(saveFn) return saveFn(); }
 function today(){ const d=new Date(); return d.toISOString().slice(0,10); }
 function fmtDate(s){ if(!s) return ''; const [y,m,d]=s.split('-'); return d+'/'+m+'/'+y; }
 function editable(x){ return (x && Object.isFrozen && (Object.isFrozen(x) || (x.items && Object.isFrozen(x.items)))) ? JSON.parse(JSON.stringify(x)) : x; }
@@ -176,7 +180,7 @@ function vHome(){
   $('#app').innerHTML = contaBarra() + storageBanner() + `<h2>Trabalhos</h2>${INSPS.length?chips:''}
   <div class="list">${list.length? list.map(x=>{ const m=MODS[x.mod]; if(!m) return ''; const r=m.resumo(x);
     return `<div class="it" data-id="${x.id}"><div style="font-size:22px">${m.icone}</div><div style="flex:1"><div class="t">${esc(x.h.cliente||'Sem cliente')}</div>
-    <div class="s">${esc(m.curto)} · ${x.h.numero?esc(x.h.numero)+' · ':''}${fmtDate(x.h.data)}${r.txt?' · '+esc(r.txt):''}</div></div>${r.pill?`<span class="pill p-${r.pill.k}">${esc(r.pill.t)}</span>`:''}<span style="color:var(--muted)">›</span></div>`;}).join('')
+    <div class="s">${x.shared?'👥 Equipe · ':''}${esc(m.curto)} · ${x.h.numero?esc(x.h.numero)+' · ':''}${fmtDate(x.h.data)}${r.txt?' · '+esc(r.txt):''}</div></div>${r.pill?`<span class="pill p-${r.pill.k}">${esc(r.pill.t)}</span>`:''}<span style="color:var(--muted)">›</span></div>`;}).join('')
   : `<div class="empty">Nenhum trabalho ainda.<br>Toque em <b>Novo trabalho</b> para começar.</div>`}</div>
   <div class="card note"><b>Módulos disponíveis:</b> ${MODS_ORD.map(k=>MODS[k].icone+' '+esc(MODS[k].nome)).join(' · ')}.<br>Cada trabalho gera relatório em PDF (padrão XPA) ou Excel. Os dados ficam no aparelho; exporte o backup ao fim de cada visita.</div>
   <div class="row"><button class="btn ghost" id="imp">Importar backup</button><input type="file" id="impf" accept=".json,application/json" style="display:none"></div>`;
@@ -205,7 +209,7 @@ function novoTrabalho(mod){
 }
 /* botões padrão do rodapé do trabalho e exclusão */
 function jobFooter(){
-  return anexosHtml()+`<div class="row" style="margin-top:14px"><button class="btn ghost" id="bk">Exportar backup</button><button class="btn danger" id="del">Excluir trabalho</button></div>`;
+  return anexosHtml()+(window.equipeHtml?equipeHtml():'')+`<div class="row" style="margin-top:14px"><button class="btn ghost" id="bk">Exportar backup</button><button class="btn danger" id="del">Excluir trabalho</button></div>`;
 }
 function bindJobFooter(){
   $('#del').onclick=()=>confirmBox('Excluir este trabalho e todas as imagens?', async()=>{
@@ -215,6 +219,7 @@ function bindJobFooter(){
   $('#bk').onclick=exportBackup;
   $('#back').onclick=()=>go('home');
   bindAnexos();
+  if(window.equipeBind) equipeBind();
 }
 /* ======================= ANEXOS (certificados de calibração e ART) ======================= */
 const ANEXOS=[['anexCal','Anexo A – Certificados de calibração dos instrumentos'],['anexArt','Anexo B – ART do serviço']];
@@ -274,7 +279,7 @@ async function importBackup(e){
     let job=null; if(o.app==='xpa-inspecoes') job=o.job; else job=converterLegado(o);
     if(!job||!MODS[job.mod]) throw 0;
     for(const [id,p] of Object.entries(o.photos||{})){ photoCache[id]=p; await writeDoc(id,p); }
-    job.kind='job'; job.updatedAt=Date.now(); if(UID) job.uid=UID; const ex=INSPS.findIndex(x=>x.id===job.id); if(ex>=0) INSPS[ex]=job; else INSPS.push(job);
+    job.kind='job'; delete job.shared; delete job.os; job.updatedAt=Date.now(); if(UID) job.uid=UID; const ex=INSPS.findIndex(x=>x.id===job.id); if(ex>=0) INSPS[ex]=job; else INSPS.push(job);
     await writeDoc(job.id, job); toast('Backup importado'+(o.app!=='xpa-inspecoes'?' (convertido do app antigo).':'.')); render();
   }catch(err){ toast('Arquivo de backup inválido.'); }
 }
@@ -496,7 +501,7 @@ function legacySave(){ try{ localStorage.setItem(LSK, JSON.stringify({insp:mem.i
 async function localPut(id,body){ const ok=await idb.put('docs',id,body); if(body.kind==='photo'){ if(!ok) mem.photo[id]=body; } else { mem.insp[id]=body; } if(!ok||body.kind!=='photo') legacySave(); return ok; }
 async function localGet(id){ return (await idb.get('docs',id)) || mem.insp[id] || mem.photo[id] || null; }
 async function localDel(id){ await idb.del('docs',id); delete mem.insp[id]; delete mem.photo[id]; legacySave(); }
-async function localList(){ const a=(await idb.all('docs')).map(x=>x[1]).filter(d=>d&&d.kind==='job'); const ids=new Set(a.map(x=>x.id)); Object.values(mem.insp).forEach(x=>{ if(!ids.has(x.id)) a.push(x); }); return a; }
+async function localList(){ const a=(await idb.all('docs')).map(x=>x[1]).filter(d=>d&&d.kind==='job'); const ids=new Set(a.map(x=>x.id)); Object.values(mem.insp).forEach(x=>{ if(x&&(!x.kind||x.kind==='job')&&!ids.has(x.id)) a.push(x); }); return a; }
 
 function showStatus(){
   const net=document.getElementById('net');
@@ -526,9 +531,17 @@ function fsVal(v){
 }
 function fsFields(o){ const f={}; for(const [k,v] of Object.entries(o)){ if(v===undefined||typeof v==='function') continue; f[k]=fsVal(v); } return f; }
 const FS_COD={INVALID_ARGUMENT:'invalid-argument',PERMISSION_DENIED:'permission-denied',UNAUTHENTICATED:'unauthenticated',RESOURCE_EXHAUSTED:'resource-exhausted',NOT_FOUND:'not-found',UNAVAILABLE:'unavailable',DEADLINE_EXCEEDED:'timeout',ABORTED:'aborted',INTERNAL:'internal'};
-async function restWrite(id,metodo,body,ms){
+const fpSeg=(k)=>/^[A-Za-z_][A-Za-z_0-9]*$/.test(k)?k:'`'+String(k).replace(/\\/g,'\\\\').replace(/`/g,'\\`')+'`';
+const fpStr=(segs)=>segs.map(fpSeg).join('.');
+function getPath(o,segs){ for(const k of segs){ if(o==null||typeof o!=='object') return undefined; o=o[k]; } return o; }
+function setPath(o,segs,v){ for(let i=0;i<segs.length-1;i++){ const k=segs[i]; if(o[k]==null||typeof o[k]!=='object'||Array.isArray(o[k])) o[k]={}; o=o[k]; } if(v===undefined) delete o[segs[segs.length-1]]; else o[segs[segs.length-1]]=v; }
+function pickPaths(obj,mask){ const out={}; for(const segs of mask){ const v=getPath(obj,segs); if(v!==undefined) setPath(out,segs,JSON.parse(JSON.stringify(v))); } return out; }
+/* caminho do documento no Firestore: trabalhos pessoais em data/users/{uid}; OS compartilhadas em os/{id} (equipe.js) */
+function docPath(id,body){ if(window.equipePath){ const p=equipePath(id,body); if(p) return p; } return 'data/users/'+UID+'/'+id; }
+async function restWrite(id,metodo,body,ms,path,mask){
   const tok=await withTimeout(FBUSER.getIdToken(),15000);
-  const url=`https://firestore.googleapis.com/v1/projects/${FBCFG.projectId}/databases/(default)/documents/data/users/${UID}/${encodeURIComponent(id)}`;
+  const qs=mask&&mask.length?'?'+mask.map(m=>'updateMask.fieldPaths='+encodeURIComponent(fpStr(m))).join('&'):'';
+  const url=`https://firestore.googleapis.com/v1/projects/${FBCFG.projectId}/databases/(default)/documents/${(path||('data/users/'+UID+'/'+id)).split('/').map(encodeURIComponent).join('/')}${qs}`;
   const ac=new AbortController(); const t=setTimeout(()=>ac.abort(),ms);
   let r;
   try{ r=await fetch(url,{method:metodo,signal:ac.signal,headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},body:body?JSON.stringify({fields:fsFields(body)}):undefined}); }
@@ -540,21 +553,24 @@ async function restWrite(id,metodo,body,ms){
   const st=(j.error&&j.error.status)||''; const msg=(j.error&&j.error.message)||('HTTP '+r.status);
   throw {code:FS_COD[st]||(r.status===413?'invalid-argument':'erro-'+r.status),message:msg};
 }
-async function pushOne(id,op){
-  if(op==='del') return restWrite(id,'DELETE',null,20000);
-  const b=await localGet(id); if(!b) return;
+async function pushOne(id,op,o){
+  o=o||{};
+  if(op==='del') return restWrite(id,'DELETE',null,20000,o.path);
+  let b=await localGet(id); if(!b) return;
+  if(o.mask&&o.mask.length) b=pickPaths(b,o.mask);
   const tam=JSON.stringify(b).length;
   if(tam>1040000) throw {code:'grande-demais',message:`documento com ${(tam/1048576).toFixed(2)} MB (limite 1 MB)`};
-  return restWrite(id,'PATCH',b,Math.min(240000,30000+tam/4)); // ~32 kB/s no pior caso de rede móvel
+  return restWrite(id,'PATCH',b,Math.min(240000,30000+tam/4),o.path,o.mask); // ~32 kB/s no pior caso de rede móvel
 }
 async function sync(){
   if(MODE!=='db'||SYNCING||!online()||!IDB){ showStatus(); return; }
   SYNCING=true; showStatus();
   try{
     const items=await idb.all('outbox');
-    items.sort((a,b)=>(a[1].kind==='photo'?0:1)-(b[1].kind==='photo'?0:1));
+    const ord=o=>o.op==='del'?(o.kind==='oshdr'?9:3):o.kind==='oshdr'?0:o.kind==='photo'?1:2; // OS compartilhada: o cabeçalho existe antes de equipamentos/fotos e é excluído por último (regras)
+    items.sort((a,b)=>ord(a[1])-ord(b[1]));
     for(const [id,o] of items){
-      try{ await pushOne(id,o.op); const cur=await idb.get('outbox',id); if(cur&&cur.at===o.at) await idb.del('outbox',id); }
+      try{ await pushOne(id,o.op,o); const cur=await idb.get('outbox',id); if(cur&&cur.at===o.at){ await idb.del('outbox',id); if(window.equipeEnviado) equipeEnviado(id); } }
       catch(e){ const code=String((e&&e.code)||'erro').replace(/_/g,'-');
         DIAG.ultimoErro=`${code} em ${id} (${new Date().toLocaleTimeString('pt-BR')})${e&&e.message?' – '+String(e.message).slice(0,120):''}`;
         if(code==='resource-exhausted'||code==='quota-exceeded'){ toast('Espaço da conta cheio ou documento grande demais. Exclua inspeções antigas.'); break; }
@@ -566,34 +582,40 @@ async function sync(){
 }
 /* gravação direta (somente quando o aparelho não tem IndexedDB) */
 const queues={};
-function directWrite(id, body){
-  const q = queues[id] || (queues[id]={running:false,pending:null}); q.pending = body;
+function directWrite(id, body, path, mask){
+  const q = queues[id] || (queues[id]={running:false,pending:null}); q.pending = body; q.path=path||('data/users/'+UID+'/'+id); q.mask=mask;
   if(q.running) return Promise.resolve();
   return (async()=>{ q.running=true;
     while(q.pending){ const b=q.pending; q.pending=null;
-      try{ await withTimeout(col().doc(id).set(b),25000); status('Salvo na conta','ok'); }
+      try{ await withTimeout(q.mask&&q.mask.length?DB.doc(q.path).set(pickPaths(b,q.mask),{merge:true}):DB.doc(q.path).set(b),25000); status('Salvo na conta','ok'); }
       catch(e){ status('Não salvo: '+((e&&e.code)||'erro'),'err'); } }
     q.running=false; })();
 }
-async function writeDoc(id, body){
+/* mask: lista de caminhos de campo (arrays de chaves) – grava só esses campos (edição simultânea na OS compartilhada) */
+async function writeDoc(id, body, mask){
   await localPut(id, body);
   if(MODE!=='db'){ showStatus(); return; }
-  if(!IDB) return directWrite(id, body);
-  await idb.put('outbox', id, {op:'set', kind:body.kind, at:Date.now()+Math.random()});
+  const path=docPath(id,body);
+  if(!IDB) return directWrite(id, body, path, mask);
+  const prev=await idb.get('outbox',id);
+  let m=null;
+  if(mask&&mask.length){ if(prev&&prev.op==='set'&&!prev.mask) m=null; else { const seen=new Set(); m=[]; for(const x of ((prev&&prev.op==='set'&&prev.mask)||[]).concat(mask)){ const k=JSON.stringify(x); if(!seen.has(k)){ seen.add(k); m.push(x); } } } }
+  await idb.put('outbox', id, {op:'set', kind:body.kind, path, mask:m, at:Date.now()+Math.random()});
   await refreshPending(); scheduleSync();
 }
 async function delDoc(id){
+  const old=await localGet(id); const path=docPath(id,old||{kind:'photo',id});
   await localDel(id); delete photoCache[id];
   if(MODE!=='db') return;
-  if(!IDB){ try{ await col().doc(id).delete(); }catch(e){} return; }
-  await idb.put('outbox', id, {op:'del', at:Date.now()+Math.random()}); await refreshPending(); scheduleSync();
+  if(!IDB){ try{ await DB.doc(path).delete(); }catch(e){} return; }
+  await idb.put('outbox', id, {op:'del', path, kind:old&&old.kind, at:Date.now()+Math.random()}); await refreshPending(); scheduleSync();
 }
 const photoCache={};
 async function getPhoto(id){
   if(photoCache[id]) return photoCache[id];
   const l=await localGet(id); if(l){ photoCache[id]=l; return l; }
   if(MODE!=='db'||!online()) return null;
-  try{ const s=await withTimeout(col().doc(id).get(),15000); if(s.exists){ const v=Object.assign({},s.data()); photoCache[id]=v; await localPut(id,v); return v; } }catch(e){}
+  try{ const s=await withTimeout(DB.doc(docPath(id,{kind:'photo',id,insp:window.equipeFotoOS?equipeFotoOS(id):undefined})).get(),15000); if(s.exists){ const v=Object.assign({},s.data()); photoCache[id]=v; await localPut(id,v); return v; } }catch(e){}
   return null;
 }
 async function prefetchPhotos(){
@@ -771,6 +793,7 @@ function bindContaBarra(){
 <script src="mod-vlf.js"></script>
 <script src="mod-epi.js"></script>
 <script src="mod-proposta.js"></script>
+<script src="equipe.js"></script>
 <script>
 /* ======================= DIAGNÓSTICO ======================= */
 document.addEventListener('click',e=>{ if(e.target&&e.target.id==='sv'){
@@ -828,6 +851,7 @@ async function iniciar(){
     INSPS=Object.values(map);
     if(!remote) toast(online()?'A conta não respondeu: usando os dados salvos no aparelho.':'Sem internet: usando os dados salvos no aparelho.');
   } else { MODE = (IDB||DIAG.local==='ok') ? 'local' : 'mem'; INSPS=local; }
+  if(window.equipeIniciar){ try{ await equipeIniciar(); }catch(e){ console.error(e); DIAG.equipe=String(e&&e.message||e); } }
   if(!window._xpaL){ window._xpaL=1; window.addEventListener('online',()=>{ showStatus(); sync(); }); window.addEventListener('offline',showStatus); setInterval(()=>{ if(PENDING) sync(); },30000); }
   await refreshPending(); go('home'); sync();
   setTimeout(()=>{ prefetchPhotos(); ensureExcelJS(); },3000);

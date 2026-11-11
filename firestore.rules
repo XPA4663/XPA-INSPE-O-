@@ -19,5 +19,28 @@ service cloud.firestore {
     match /config/contador_propostas { allow read, write: if canProp(); }
     match /config/uso_ia { allow read: if isAdmin(); allow write: if false; }
     match /propostas/{id} { allow read, write: if canProp(); }
+
+    // OS compartilhada (trabalho em equipe): membros = e-mails (minúsculos) dos técnicos da OS
+    function isMember(d) { return signedIn() && email() in d.membros; }
+    match /os/{osId} {
+      function osDoc() { return get(/databases/$(database)/documents/os/$(osId)).data; }
+      allow read: if isMember(resource.data) || isAdmin();
+      allow create: if signedIn() && request.resource.data.dono == email() && email() in request.resource.data.membros;
+      // membros editam os dados do trabalho e o próprio nome; só o responsável muda equipe, status e responsável
+      allow update: if (resource.data.dono == email() || isAdmin())
+        || (isMember(resource.data) && resource.data.status != 'finalizada'
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['membros','dono','status','finalizadaEm','finalizadaPor']));
+      allow delete: if resource.data.dono == email() || isAdmin();
+      match /equip/{eqId} {
+        allow read: if isMember(osDoc()) || isAdmin();
+        allow create, update: if (isMember(osDoc()) || isAdmin()) && osDoc().status != 'finalizada';
+        allow delete: if (isMember(osDoc()) && osDoc().status != 'finalizada') || osDoc().dono == email() || isAdmin();
+      }
+      match /fotos/{fotoId} {
+        allow read: if isMember(osDoc()) || isAdmin();
+        allow create, update: if (isMember(osDoc()) || isAdmin()) && osDoc().status != 'finalizada';
+        allow delete: if (isMember(osDoc()) && osDoc().status != 'finalizada') || osDoc().dono == email() || isAdmin();
+      }
+    }
   }
 }

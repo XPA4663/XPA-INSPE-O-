@@ -43,6 +43,34 @@ function criarModuloChecklist(cfg){
     consideracoes:null,
   },cfg.tx||{});
   const worst=(a,b)=>{ if(!a) return b; if(!b) return a; return RANK_RES[a]>=RANK_RES[b]?a:b; };
+  /* ---------- ensaios previstos: cada grupo de medições pode ser desmarcado (e.ensOff[gid] = motivo) ---------- */
+  const gidOf=g=>g.id||slug(g.g);
+  const has=(o,k)=>!!(o&&Object.prototype.hasOwnProperty.call(o,k));
+  const naAuto=(e,g)=>!!(g.quando&&!g.quando(e.d||{})&&!has(e.ensOn,gidOf(g)));
+  const ensOff=(e,g)=>has(e.ensOff,gidOf(g))||naAuto(e,g);
+  const motivoOff=(e,g)=>{ const v=has(e.ensOff,gidOf(g))?String(e.ensOff[gidOf(g)]||'').trim():''; return v||(naAuto(e,g)?(g.naMotivo||'Não se aplica a este equipamento'):''); };
+  function mFilt(e,T){ if(!e.ensOff||!Object.keys(e.ensOff).length) return e;
+    const off=new Set((T.meds||[]).filter(g=>ensOff(e,g)).flatMap(g=>g.f.map(f=>f[0])));
+    const m={}; for(const [k,v] of Object.entries(e.m||{})) if(!off.has(k)) m[k]=v; return Object.assign({},e,{m}); }
+  const temValor=(e,g)=>g.f.some(f=>{ const v=(e.m||{})[f[0]]; return v!==undefined&&v!==null&&String(v).trim()!==''; });
+  function ensStatus(e,T){ const gs=comMeds?(T.meds||[]):[]; const on=gs.filter(g=>!ensOff(e,g)); return {total:gs.length, prev:on.length, feitos:on.filter(g=>temValor(e,g)).length, pend:on.filter(g=>!temValor(e,g)), off:gs.filter(g=>ensOff(e,g))}; }
+  const quem=()=>(typeof window.quemSou==='function'?window.quemSou():'');
+  const fmtQuando=(t)=>{ if(!t) return ''; const d=new Date(t); return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); };
+  /* quem registrou cada medição: e.medPor[campo] = {por, at} */
+  const vazio=v=>v===undefined||v===null||String(v).trim()==='';
+  const porCampo=(e,k)=>{ const p=(e.medPor||{})[k]; return p&&p.por&&!vazio((e.m||{})[k])?p:null; };
+  const porGrupo=(e,g)=>{ const ps=g.f.map(f=>porCampo(e,f[0])).filter(Boolean); return {nomes:[...new Set(ps.map(p=>p.por))], at:ps.reduce((a,p)=>Math.max(a,p.at||0),0)}; };
+  const porTxt=(e,g)=>{ const p=porGrupo(e,g); return p.nomes.length?`${p.nomes.join(', ')}${p.at?' · '+fmtQuando(p.at):''}`:''; };
+  const porTxtCampo=(e,k)=>{ const p=porCampo(e,k); return p?`${p.por}${p.at?' · '+fmtQuando(p.at):''}`:''; };
+  (function(){ if(document.getElementById('ens-css')) return; const st=document.createElement('style'); st.id='ens-css'; st.textContent=`
+.ens{border:1px solid #D5DAE2;border-radius:9px;padding:8px 10px;margin:8px 0;background:#fff}
+.ens .eh{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ens .eh b{color:#0A1733}
+.ens .tg{display:flex;align-items:center;gap:6px;margin:0;font-size:13px;font-weight:bold;color:#2E7D32;white-space:nowrap;cursor:pointer}
+.ens .tg input{-webkit-appearance:checkbox;appearance:auto;width:20px;height:20px;min-width:20px;margin:0;padding:0;accent-color:#2E7D32;flex:none}
+.ens.off{background:#F3F4F6}.ens.off .eh b{color:#8A93A6;text-decoration:line-through}.ens.off .tg{color:#8A93A6}
+.ens.off .eb{display:none}.ens .em{display:none;margin-top:6px}.ens.off .em{display:block}
+.ens .por{font-size:11.5px;color:#6B7385;margin-top:4px}`; document.head.appendChild(st); })();
   const hTit=(h)=>(cfg.hTitulo&&h[cfg.hTitulo])||'';
 
   function novoItem(tipo,base){
@@ -61,12 +89,12 @@ function criarModuloChecklist(cfg){
     for(const it of T.items){ const r=(e.items||{})[it[0]]; if(!r||!r.s) continue; n[r.s]=(n[r.s]||0)+1;
       if(r.s==='A') auto=worst(auto,'att');
       if(r.s==='NC'){ const sev=r.sev||it[3]; auto=worst(auto, sev==='A'?'crit':sev==='B'?'nc':'att'); ncs.push({item:it, sev, obs:r.obs||''}); } }
-    const meds=comMeds?avaliar(e,h,T):[]; const medBad=meds.filter(x=>x.st&&x.st!=='ok');
+    const meds=comMeds?avaliar(mFilt(e,T),h,T):[]; const medBad=meds.filter(x=>x.st&&x.st!=='ok');
     for(const x of meds){ if(x.st==='ok') auto=worst(auto,'ok'); if(x.st==='att') auto=worst(auto,'att'); if(x.st==='nc') auto=worst(auto,'nc'); }
     if((n.C||n.NA)&&!auto) auto='ok';
     const total=T.items.length, done=n.C+n.A+n.NC+n.NA;
     const k=e.manual||auto||'pend';
-    return {k,label:RES[k].label,curto:RES[k].curto,auto,n,done,total,ncs,meds,medBad,manual:!!e.manual};
+    return {k,label:RES[k].label,curto:RES[k].curto,auto,n,done,total,ncs,meds,medBad,manual:!!e.manual,ens:ensStatus(e,T)};
   }
 
   /* ---------- telas ---------- */
@@ -75,7 +103,7 @@ function criarModuloChecklist(cfg){
     const grupos=cfg.grupos||[['',''] ];
     const lista=(eqs)=>`<div class="list">${eqs.map(e=>{ const r=equipResult(e); const i=CUR.items.indexOf(e)+1; const T=TIPOS[e.tipo];
       return `<div class="it" data-e="${e.id}"><div style="font-size:20px">${T.icone}</div><div style="flex:1"><div class="t">${i}. ${esc(eqTitle(e))}</div>
-      <div class="s">${e.d.tag?esc(T.nome)+' · ':''}${e.d.local?esc(e.d.local)+' · ':''}${r.done}/${r.total} itens${r.ncs.length?' · '+r.ncs.length+' NC':''}</div></div><span class="pill p-${r.k}">${r.curto}</span></div>`;}).join('')}</div>`;
+      <div class="s">${e.d.tag?esc(T.nome)+' · ':''}${e.d.local?esc(e.d.local)+' · ':''}${r.done}/${r.total} itens${r.ens.prev?' · ensaios '+r.ens.feitos+'/'+r.ens.prev:''}${r.ncs.length?' · '+r.ncs.length+' NC':''}</div></div><span class="pill p-${r.k}">${r.curto}</span></div>`;}).join('')}</div>`;
     const porGrupo=cfg.grupos?grupos.map(([g,gn])=>{ const eqs=CUR.items.filter(e=>TIPOS[e.tipo].grupo===g); if(!eqs.length) return ''; return `<div class="note" style="margin:6px 2px 4px;font-weight:bold">${gn}</div>`+lista(eqs); }).join(''):lista(CUR.items);
     $('#app').innerHTML = storageBanner() + `<div class="row" style="margin-bottom:8px"><button id="back">‹ Trabalhos</button></div>
     ${cfg.jobFields(h)}
@@ -121,7 +149,12 @@ function criarModuloChecklist(cfg){
         <label>Observação / evidência</label><textarea data-k="obs" placeholder="Descreva o que foi encontrado">${esc(r.obs||'')}</textarea>
         <label>Fotos do item</label><div class="row">${photoBtns(`data-slot="item:${it[0]}"`)}</div><div class="thumbs" id="th_item_${it[0]}"></div></div></div>`; }).join('')}</div>
     ${meds.length?`<div class="sec">Medições e ensaios</div>
-    <div class="card" id="mm">${meds.map(g=>`<div style="font-weight:bold;color:var(--navy);margin:8px 0 2px">${esc(g.g)}</div><div class="grid">${g.f.map(f=>field(f[0],f[1],e.m,'text','',DEC)).join('')}</div><div class="note">${esc(g.note||'')}</div>`).join('')}
+    <div class="card" id="mm"><div class="note" style="margin-bottom:2px">Desmarque <b>Realizar</b> nos ensaios que não serão feitos neste ${IN}. Eles saem da avaliação e aparecem no relatório como "não realizados".</div>
+    ${meds.map(g=>{ const gid=gidOf(g), off=ensOff(e,g), pt=porTxt(e,g);
+      const mf=(f)=>Array.isArray(f[2])?sel(f[0],f[1],e.m,f[2].map(o=>[o,o||'—'])):field(f[0],f[1],e.m,'text','',f[2]==='txt'?'':DEC);
+      return `<div class="ens ${off?'off':''}" data-g="${gid}"><div class="eh"><b>${esc(g.g)}</b><label class="tg"><input type="checkbox" data-gon="${gid}" ${off?'':'checked'}> Realizar</label></div>
+      <div class="eb"><div class="grid">${g.f.map(mf).join('')}</div><div class="note">${esc(g.note||'')}</div><div class="por" data-por="${gid}">${pt?'Registrado por '+esc(pt):''}</div></div>
+      <div class="em"><input data-gmot="${gid}" value="${esc(off?((e.ensOff||{})[gid]||''):'')}" placeholder="${esc(naAuto(e,g)?(g.naMotivo||'Não se aplica')+' (automático)':'Motivo (opcional) – ex.: não contratado, equipamento energizado')}"></div></div>`; }).join('')}
     <div id="medres" style="margin-top:10px"></div></div>`:''}
     ${T.ext&&comMeds?T.ext.html(e):''}
     <div class="sec">Fotos</div>
@@ -139,7 +172,15 @@ function criarModuloChecklist(cfg){
     </div>
     <div class="row"><button class="btn ghost" id="dup">Duplicar ${IN}</button><button class="btn danger" id="dele">Excluir ${IN}</button></div>`;
     const upd=()=>{ $('#rtag').textContent=`${T.icone} ${idx}. ${eqTitle(e)}`; refreshCalc(); };
-    bindFields($('#ef'),d,upd); if($('#mm')) bindFields($('#mm'),e.m,upd); bindFields($('#df'),e,upd);
+    bindFields($('#ef'),d,upd); if($('#mm')){ bindFields($('#mm'),e.m,upd);
+      const stamp=el=>{ const box=el.closest('[data-g]'); if(!box) return; const q=quem(); if(!q) return;
+        e.medPor=e.medPor||{}; e.medPor[el.dataset.k]={por:q, at:Date.now()}; const g=meds.find(x=>gidOf(x)===box.dataset.g); const pe=box.querySelector('[data-por]'); if(pe&&g){ const t=porTxt(e,g); pe.textContent=t?'Registrado por '+t:''; } };
+      $('#mm').querySelectorAll('[data-k]').forEach(el=>{ el.addEventListener('input',()=>stamp(el)); if(el.tagName==='SELECT') el.addEventListener('change',()=>stamp(el)); });
+      $('#mm').querySelectorAll('[data-gon]').forEach(cb=>cb.onchange=()=>{ const gid=cb.dataset.gon; e.ensOff=e.ensOff||{}; e.ensOn=e.ensOn||{};
+        if(cb.checked){ delete e.ensOff[gid]; e.ensOn[gid]=true; } else { delete e.ensOn[gid]; e.ensOff[gid]=(cb.closest('[data-g]').querySelector('[data-gmot]').value||''); }
+        cb.closest('[data-g]').classList.toggle('off',!cb.checked); saveCur(); upd(); });
+      $('#mm').querySelectorAll('[data-gmot]').forEach(el=>el.oninput=()=>{ const gid=el.dataset.gmot; e.ensOff=e.ensOff||{}; e.ensOff[gid]=el.value; if(e.ensOn) delete e.ensOn[gid]; saveCur(); });
+      if(meds.some(g=>g.quando)) $('#ef').querySelectorAll('select').forEach(sl=>sl.addEventListener('change',()=>{ const y=window.scrollY; render(); window.scrollTo(0,y); })); } bindFields($('#df'),e,upd);
     document.querySelectorAll('[data-it]').forEach(box=>{
       const id=box.dataset.it; const it=T.items.find(x=>x[0]===id);
       const get=()=>e.items[id]||(e.items[id]={s:'',sev:it[3],obs:'',photos:[]});
@@ -181,7 +222,7 @@ function criarModuloChecklist(cfg){
   function refreshCalc(){
     const e=ITEM, r=equipResult(e);
     $('#rpill').className='pill p-'+r.k; $('#rpill').textContent=r.curto;
-    $('#rcalc').textContent=`Checklist ${r.done}/${r.total} · C ${r.n.C||0} · Atenção ${r.n.A||0} · NC ${r.n.NC||0} · N/A ${r.n.NA||0}${r.meds.length?' · medições fora do limite: '+r.medBad.length:''}`;
+    $('#rcalc').textContent=`Checklist ${r.done}/${r.total} · C ${r.n.C||0} · Atenção ${r.n.A||0} · NC ${r.n.NC||0} · N/A ${r.n.NA||0}${r.ens.total?` · ensaios ${r.ens.feitos}/${r.ens.prev}${r.ens.off.length?' ('+r.ens.off.length+' não realizado'+(r.ens.off.length>1?'s':'')+')':''}`:''}${r.meds.length?' · medições fora do limite: '+r.medBad.length:''}`;
     $('#racao').textContent = r.k==='pend' ? 'Avalie os itens do checklist'+(comMeds?' e registre as medições.':'.') : (RES[r.k].acao + (r.manual?' (classificação manual)':''));
     $('#rprog').style.width=(r.total?Math.round(r.done/r.total*100):0)+'%';
     $('#jwrap').style.display = e.manual?'block':'none';
@@ -256,6 +297,14 @@ function criarModuloChecklist(cfg){
         columnStyles:{0:{cellWidth:12,halign:'center',fontStyle:'bold'},1:{cellWidth:40},2:{cellWidth:66}},
         didParseCell:c=>{ if(c.section==='body'&&c.column.index===0) c.cell.styles.textColor=plano[c.row.index].sev==='A'?C_RES.crit:plano[c.row.index].sev==='B'?C_RES.nc:C_RES.att; }});
     } else { y=ensure(y,20); y=sec('Plano de ação',y); y=para('Não foram registradas não conformidades ou observações.',y); }
+    if(comMeds){ const tot=res.reduce((a,x)=>({prev:a.prev+x.ens.prev,feitos:a.feitos+x.ens.feitos,off:a.off+x.ens.off.length}),{prev:0,feitos:0,off:0});
+      const tec={}; eqs.forEach((e,i)=>{ for(const g of (TIPOS[e.tipo].meds||[])){ if(ensOff(e,g)||!temValor(e,g)) continue; const pg=porGrupo(e,g); (pg.nomes.length?pg.nomes:['Não identificado']).forEach(nm=>{ const t=tec[nm]||(tec[nm]={n:0,eq:new Set(),ult:0}); t.n++; t.eq.add(eqName(e,i));
+            for(const f of g.f){ const p=porCampo(e,f[0]); if(p&&p.por===nm) t.ult=Math.max(t.ult,p.at||0); } }); } });
+      if(tot.prev){ y=ensure(y,30); y=sec('Ensaios executados',y);
+        y=para(`Ensaios previstos: ${tot.prev} · com resultado registrado: ${tot.feitos} · pendentes: ${tot.prev-tot.feitos}${tot.off?` · desmarcados como não realizados: ${tot.off}`:''}.`,y,{size:9});
+        const tl=Object.entries(tec); if(tl.length&&!(tl.length===1&&tl[0][0]==='Não identificado')){
+          y=tbl({startY:y, head:[['Técnico','Ensaios registrados',INPcap,'Último registro']], body:tl.sort((a,b)=>b[1].n-a[1].n).map(([nm,t])=>[nm,String(t.n),[...t.eq].join(', '),t.ult?fmtQuando(t.ult):'-']),
+            styles:{fontSize:8,cellPadding:1.6,lineColor:C_LINE,lineWidth:.2,textColor:INK,valign:'top'}, columnStyles:{0:{cellWidth:46,fontStyle:'bold'},1:{cellWidth:22,halign:'center'},3:{cellWidth:28}}}); } } }
     if(h.obs){ y=ensure(y,20); y=sec('Observações gerais',y); y=para(h.obs,y); }
 
     /* fichas */
@@ -279,8 +328,11 @@ function criarModuloChecklist(cfg){
         columnStyles:{0:{cellWidth:70},1:{cellWidth:28,textColor:C_MUT},2:{cellWidth:22,fontStyle:'bold',halign:'center'},3:{cellWidth:10,halign:'center',fontStyle:'bold'}},
         didParseCell:c=>{ if(c.section==='body'&&c.column.index===2){ const st=((e.items||{})[T.items[c.row.index][0]]||{}).s; if(st) c.cell.styles.textColor=C_ST[st]; } }});
       if(comMeds){
-        const mrows=[]; for(const g of (T.meds||[])) for(const f of g.f){ const v=(e.m||{})[f[0]]; if(v!==undefined&&v!==''){ mrows.push([g.g,f[1],String(v)]); } }
-        if(mrows.length){ y=ensure(y,30); y=tbl({startY:y, head:[['Ensaio','Grandeza','Valor medido']], body:mrows, styles:{fontSize:7.6,cellPadding:1.3,lineColor:C_LINE,lineWidth:.2,textColor:INK}, columnStyles:{0:{cellWidth:62,textColor:C_MUT},2:{cellWidth:30,halign:'right',fontStyle:'bold'}}}); }
+        const mrows=[], mpor=[]; for(const g of (T.meds||[])){ if(ensOff(e,g)) continue; for(const f of g.f){ const v=(e.m||{})[f[0]]; if(v!==undefined&&v!==''){ mrows.push([g.g,f[1],String(v)]); mpor.push(porTxtCampo(e,f[0])); } } }
+        const comPor=mpor.some(Boolean);
+        if(mrows.length){ y=ensure(y,30); y=tbl({startY:y, head:[['Ensaio','Grandeza','Valor medido'].concat(comPor?['Executado por']:[])], body:comPor?mrows.map((r,k)=>r.concat([mpor[k]])):mrows, styles:{fontSize:7.6,cellPadding:1.3,lineColor:C_LINE,lineWidth:.2,textColor:INK}, columnStyles:Object.assign({0:{cellWidth:comPor?50:62,textColor:C_MUT},2:{cellWidth:comPor?24:30,halign:'right',fontStyle:'bold'}},comPor?{3:{cellWidth:38,textColor:C_MUT,fontSize:7}}:{})}); }
+        const offs=r.ens.off; if(offs.length){ y=ensure(y,20); y=tbl({startY:y, head:[['Ensaio não realizado','Motivo']], body:offs.map(g=>[g.g,motivoOff(e,g)||'Não previsto para este equipamento']), styles:{fontSize:7.6,cellPadding:1.3,lineColor:C_LINE,lineWidth:.2,textColor:C_MUT}, columnStyles:{0:{cellWidth:80}}}); }
+        if(r.ens.pend.length){ y=ensure(y,12); y=para('Ensaios previstos sem resultado registrado: '+r.ens.pend.map(g=>g.g).join('; ')+'.',y,{size:8,italic:true,color:C_RES.nc}); }
         if(r.meds.length){ y=ensure(y,25);
           y=tbl({startY:y, head:[['Avaliação','Valor','Limite de referência','Resultado']], body:r.meds.map(x=>[x.label,x.val,x.lim,x.st?(x.st==='ok'?'OK':x.st==='att'?'Atenção':'Não conforme'):'—']),
             styles:{fontSize:7.6,cellPadding:1.3,lineColor:C_LINE,lineWidth:.2,textColor:INK}, columnStyles:{1:{cellWidth:26,halign:'right'},2:{cellWidth:36},3:{cellWidth:24,fontStyle:'bold',halign:'center'}},
@@ -356,15 +408,16 @@ function criarModuloChecklist(cfg){
 
     if(comMeds){
       const w4=wb.addWorksheet('Medições',{views:[{state:'frozen',ySplit:5,showGridLines:false}]});
-      w4.columns=[6,22,26,40,18,26,14].map(w=>({width:w}));
-      r=head(w4,'MEDIÇÕES, ENSAIOS E AVALIAÇÃO',7,SUB); tableHeader(w4,r,['Nº',INcap,'Tipo','Grandeza','Valor','Limite de referência','Resultado']); r++;
+      w4.columns=[6,22,26,40,18,26,14,30].map(w=>({width:w}));
+      r=head(w4,'MEDIÇÕES, ENSAIOS E AVALIAÇÃO',7,SUB); tableHeader(w4,r,['Nº',INcap,'Tipo','Grandeza','Valor','Limite de referência','Resultado','Executado por']); r++;
       eqs.forEach((e,i)=>{ const T=TIPOS[e.tipo];
-        for(const g of (T.meds||[])) for(const f of g.f){ const v=(e.m||{})[f[0]]; if(v===undefined||v==='') continue; cellRow(w4,r,[i+1,eqTitle(e),T.nome,`${g.g} – ${f[1]}`,v,'',''],{center:[0,4]}); r++; }
+        for(const g of (T.meds||[])){ if(ensOff(e,g)){ cellRow(w4,r,[i+1,eqTitle(e),T.nome,g.g,'Não realizado',motivoOff(e,g)||'Não previsto','—',''],{center:[0,4,6]}); r++; continue; }
+          for(const f of g.f){ const v=(e.m||{})[f[0]]; if(v===undefined||v==='') continue; cellRow(w4,r,[i+1,eqTitle(e),T.nome,`${g.g} – ${f[1]}`,v,'','',porTxtCampo(e,f[0])],{center:[0,4]}); r++; } }
         if(T.ext&&T.ext.excelRows) for(const x of T.ext.excelRows(e)){ const row=cellRow(w4,r,[i+1,eqTitle(e),T.nome,x[0],x[1],x[2],x[3]],{center:[0,4,6]});
           if(x[4]){ const c=row.getCell(7); c.font=font({bold:true,size:9,color:{argb:PC[x[4]]}}); c.fill=fill(PF[x[4]]); } r++; }
         for(const x of res[i].meds){ const row=cellRow(w4,r,[i+1,eqTitle(e),T.nome,'Avaliação: '+x.label,x.val,x.lim,x.st?(x.st==='ok'?'OK':x.st==='att'?'Atenção':'Não conforme'):'—'],{center:[0,4,6]});
           if(x.st){ const c=row.getCell(7); c.font=font({bold:true,size:9,color:{argb:PC[x.st]}}); c.fill=fill(PF[x.st]); } r++; } });
-      w4.autoFilter={from:{row:5,column:1},to:{row:r-1,column:7}};
+      w4.autoFilter={from:{row:5,column:1},to:{row:r-1,column:8}};
     }
 
     const w5=wb.addWorksheet('Plano de ação',{views:[{state:'frozen',ySplit:5,showGridLines:false}]});
@@ -401,6 +454,9 @@ function criarModuloChecklist(cfg){
       const w=rs.reduce((a,r)=>(r.k!=='pend'&&(a===null||RANK_RES[r.k]>RANK_RES[a]))?r.k:a,null);
       return {txt:`${hTit(x.h)?hTit(x.h)+' · ':''}${eq.length} ${eq.length===1?IN:INP}${nc?' · '+nc+' NC':''}${at?' · '+at+' atenção':''}`, pill:w?{k:w,t:RES[w].curto}:null}; },
     pdf:gerarPDF, excel:gerarExcel,
+    pendencias:(x)=>{ const out=[]; (x.items||[]).forEach((e,i)=>{ const r=equipResult(e,x.h); const nm=`${i+1}. ${eqTitle(e)}`;
+      if(r.done<r.total) out.push(`${nm}: checklist ${r.done}/${r.total}`);
+      if(r.ens.pend.length) out.push(`${nm}: sem resultado – ${r.ens.pend.map(g=>g.g).join('; ')}`); }); return out; },
   });
   return {TIPOS, equipResult};
 }
