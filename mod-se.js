@@ -351,9 +351,144 @@ function avaliarRP(e){ const a=ansiOf(e), out=[];
     out.push({label:`ANSI ${fn} – ${F[fn].nome}`, val:`${c.ok}/${tot} aprovados`+(c.pend?` · ${c.pend} pendente(s)`:''), lim:'todos os pontos na tolerância', st:c.bad?'nc':(c.pend||!tot)?null:'ok'}); }
   return out; }
 
+/* ---------- Transformador: planilhas por tap (TTR e resistência ôhmica), fator de potência e buchas ---------- */
+const TRX_POS={
+  'Dyn1': {ttr:['H1-H3 x X0-X1','H1-H2 x X0-X2','H2-H3 x X0-X3'], at:['H1-H3','H1-H2','H2-H3'], bt:['X0-X1','X0-X2','X0-X3'], k:(a,b)=>a/(b/Math.sqrt(3))},
+  'Dyn11':{ttr:['H1-H3 x X1-X0','H2-H1 x X2-X0','H3-H2 x X3-X0'], at:['H1-H3','H2-H1','H3-H2'], bt:['X0-X1','X0-X2','X0-X3'], k:(a,b)=>a/(b/Math.sqrt(3))},
+  'YNd1': {ttr:['H1-H0 x X1-X3','H2-H0 x X2-X1','H3-H0 x X3-X2'], at:['H0-H1','H0-H2','H0-H3'], bt:['X1-X2','X2-X3','X3-X1'], k:(a,b)=>(a/Math.sqrt(3))/b},
+  'Dd0':  {ttr:['H1-H2 x X1-X2','H2-H3 x X2-X3','H3-H1 x X3-X1'], at:['H1-H2','H2-H3','H3-H1'], bt:['X1-X2','X2-X3','X3-X1'], k:(a,b)=>a/b},
+  'YNyn0':{ttr:['H1-H0 x X1-X0','H2-H0 x X2-X0','H3-H0 x X3-X0'], at:['H0-H1','H0-H2','H0-H3'], bt:['X0-X1','X0-X2','X0-X3'], k:(a,b)=>a/b},
+  'Monofásico':{ttr:['H1-H2 x X1-X2'], at:['H1-H2'], bt:['X1-X2'], k:(a,b)=>a/b},
+};
+const TRX_MAT={'Cobre':234.5,'Alumínio':225};
+const TRX_LIM={ttr:[0.5,1]};
+const trxTolRO=t=>{ const x=num(t.ro.tol); return x&&x>0?x:1; };
+const trxSt=(x,a,b)=>x===null||!isFinite(x)?null:(Math.abs(x)<=a?'ok':Math.abs(x)<=b?'att':'nc');
+const trxLab=st=>st==='ok'?'Aprovado':st==='att'?'Atenção':st==='nc'?'Reprovado':'—';
+function trxLigDe(d){ const g=String(d.grupo||'').replace(/\s/g,''); const k=Object.keys(TRX_POS).find(x=>g.toLowerCase().startsWith(x.toLowerCase())); return k||'Dyn1'; }
+function trxOf(e){ const t=e.tr||(e.tr={}); const d=e.d||{};
+  if(!t.lig) t.lig=trxLigDe(d); if(t.vbt===undefined) t.vbt='';
+  t.ttr=t.ttr||[]; t.ro=t.ro||{mat:'Cobre',temp:'',ref:'75',tol:'1',blocos:[]}; t.ro.blocos=t.ro.blocos||[];
+  t.fp=t.fp||{temp:'',k:'',rows:['GST','GSTg','UST'].map(m=>({modo:m,kv:'',i:'',fp:'',fp20:'',cap:''}))};
+  t.bu=t.bu||{rows:['H1','H2','H3'].map(p=>({pos:p,kv:'',i:'',fp:'',fp20:'',cap:'',capp:''}))};
+  return t; }
+/* cálculos */
+function trxTeo(t,b,r){ const m=num(r.teo); if(m!==null) return {v:m,auto:false}; const a=num(b.vat), s=num(t.vbt); const L=TRX_POS[t.lig]||TRX_POS.Dyn1;
+  return (a!==null&&s!==null&&s>0)?{v:L.k(a,s),auto:true}:{v:null,auto:false}; }
+function trxTTR(t,b,r){ const teo=trxTeo(t,b,r), med=num(r.med); const err=(teo.v&&med!==null)?(med-teo.v)/teo.v*100:null; return {teo, med, err, st:trxSt(err,...TRX_LIM.ttr)}; }
+function trxRmed(r){ const m=num(r.med); if(m!==null) return {v:m,auto:false}; const v=num(r.v), i=num(r.i); if(v===null||!i) return {v:null,auto:false};
+  const ohm=(r.vu==='mV'?v/1000:v)/i; return {v:r.mu==='mΩ'?ohm*1000:ohm,auto:true}; }
+function trxCorr(t,R){ const K=TRX_MAT[t.ro.mat]||234.5, T=num(t.ro.temp), Tr=num(t.ro.ref)||75; return (R===null||T===null)?null:R*(K+Tr)/(K+T); }
+function trxRO(t,b){ const rs=b.rows.map(r=>{ const m=trxRmed(r); return {m, c:trxCorr(t,m.v)}; });
+  const base=rs.map(x=>x.c!==null?x.c:x.m.v); const val=base.filter(x=>x!==null); const avg=val.length>=2?val.reduce((a,c)=>a+c,0)/val.length:null;
+  const out=rs.map((x,i)=>{ const err=(avg&&base[i]!==null)?(base[i]-avg)/avg*100:null; return Object.assign(x,{err,st:trxSt(err,trxTolRO(t),trxTolRO(t)*1.5)}); });
+  const errs=out.map(x=>x.err).filter(x=>x!==null); const maxErr=errs.length?errs.reduce((a,c)=>Math.abs(c)>Math.abs(a)?c:a,0):null;
+  return {rows:out, maxErr}; }
+function trxFP(e,t,r){ const seco=(e.d||{}).isol==='Seco', fl=seco?[2,3]:[0.5,1]; const f=num(r.fp), k=num(t.fp.k); let f20=num(r.fp20), auto=false;
+  if(f20===null&&f!==null&&k!==null){ f20=f*k; auto=true; } const x=f20!==null?f20:f; return {f20,auto,st:x===null?null:(x<=fl[0]?'ok':x<=fl[1]?'att':'nc'),lim:fl}; }
+function trxBU(t,r){ const f=num(r.fp), k=num(t.fp.k); let f20=num(r.fp20), auto=false; if(f20===null&&f!==null&&k!==null){ f20=f*k; auto=true; }
+  const cm=num(r.cap), cp=num(r.capp); const dv=(cm!==null&&cp)?(cm-cp)/cp*100:null; const x=f20!==null?f20:f;
+  const s1=x===null?null:(x<=0.5?'ok':x<=1?'att':'nc'), s2=dv===null?null:(Math.abs(dv)<=5?'ok':Math.abs(dv)<=10?'att':'nc');
+  const st=[s1,s2].filter(Boolean).sort((a,b)=>RANK_RES[b]-RANK_RES[a])[0]||null; return {f20,auto,dv,st}; }
+const trxPH=(o)=>o.v===null?'':fx(o.v,o.v>=100?2:o.v>=10?3:4);
+let TRE=null, TRREF=()=>{};
+const TR_EXT={
+  novo(it,base){ it.d._planilha=1; if(base&&base.tr){ const t=JSON.parse(JSON.stringify(base.tr)); t.ttr.forEach(b=>b.rows.forEach(r=>r.med='')); (t.ro.blocos||[]).forEach(b=>b.rows.forEach(r=>{ r.med='';r.v='';r.i=''; }));
+    (t.fp.rows||[]).forEach(r=>{ r.kv='';r.i='';r.fp='';r.fp20='';r.cap=''; }); (t.bu.rows||[]).forEach(r=>{ r.kv='';r.i='';r.fp='';r.fp20='';r.cap=''; }); it.tr=t; } },
+  html(e){ return `<div class="ansi"><div class="sec">Ensaios do transformador – planilhas</div><div id="trx"></div></div>`; },
+  bind(e,refresh){ TRE=e; TRREF=refresh||(()=>{}); trxRender(); },
+  async pdf(K,e,y){ const t=trxOf(e); const {INK}=K;
+    const ST={fontSize:7.4,cellPadding:1.2,lineColor:C_LINE,lineWidth:.2,textColor:INK,halign:'center',valign:'middle'};
+    const stc=c=>{ if(c.section!=='body') return; const s=String(c.cell.raw??''); if(s==='Aprovado') c.cell.styles.textColor=C_RES.ok; else if(s==='Reprovado') c.cell.styles.textColor=C_RES.nc; else if(s==='Atenção') c.cell.styles.textColor=C_RES.att; if(c.column.index===c.table.columns.length-1) c.cell.styles.fontStyle='bold'; };
+    const tb=(head,body)=>{ y=K.tbl({startY:y,head:[head],body,styles:ST,headStyles:{fillColor:[19,36,74],textColor:255,halign:'center',fontStyle:'bold'},didParseCell:stc}); };
+    const tit=s=>{ y=K.ensure(y,24); y=K.para(s,y,{bold:true,size:9.5,color:C_NAVY}); };
+    const ttr=[]; t.ttr.forEach(b=>b.rows.forEach((r,i)=>{ const c=trxTTR(t,b,r); if(c.med===null&&c.teo.v===null) return; ttr.push([i?'':(b.tap||'—'),i?'':(b.vat||'—'),r.pos,fx(c.teo.v,4),r.med||'—',fx(c.err,3),trxLab(c.st)]); }));
+    if(ttr.length){ tit(`Ensaios de relação de transformação (TTR) – ligação ${t.lig}${t.vbt?' · tensão BT '+t.vbt+' V':''} · aceitação: erro ≤ ± ${fmtN(TRX_LIM.ttr[0])} % (NBR 5356-1)`);
+      tb(['Tap','Tensão AT (V)','Posição','Relação teórica','Relação medida','Erro (%)','Resultado'],ttr); }
+    const ro=[]; t.ro.blocos.forEach(b=>{ const c=trxRO(t,b); b.rows.forEach((r,i)=>{ const x=c.rows[i]; if(x.m.v===null) return; ro.push([i?'':(b.tap||'—'),r.pos,r.v?r.v+' '+(r.vu||'V'):'—',r.i||'—',fx(x.m.v,3)+' '+(r.mu||'Ω'),x.c!==null?fx(x.c,3)+' '+(r.mu||'Ω'):'—',fx(x.err,2),trxLab(x.st)]); }); });
+    if(ro.length){ const T0=t.ro.temp||'—', Tr=t.ro.ref||'75'; tit(`Ensaios de resistência ôhmica dos enrolamentos – medido a ${T0} °C, corrigido a ${Tr} °C (${(t.ro.mat||'Cobre').toLowerCase()}) · erro em relação à média das fases do mesmo tap; aceitação ± ${fmtN(trxTolRO(t))} %`);
+      tb(['Tap','Posição','Tensão','Corrente (A)',`Medido a ${T0} °C`,`Corrigido a ${Tr} °C`,'Erro (%)','Resultado'],ro); }
+    const fp=t.fp.rows.filter(r=>num(r.fp)!==null||num(r.fp20)!==null||num(r.cap)!==null).map(r=>{ const c=trxFP(e,t,r); return [r.modo,r.kv||'—',r.i||'—',r.fp||'—',fx(c.f20,3),r.cap||'—',trxLab(c.st)]; });
+    if(fp.length){ tit(`Ensaios de fator de potência do transformador${t.fp.temp?' – medido a '+t.fp.temp+' °C':''}, corrigido a 20 °C`); tb(['Modo','Tensão (kV)','Corrente (mA)',`FP medido (%)`,'FP a 20 °C (%)','Cap. (pF)','Resultado'],fp); }
+    const bu=t.bu.rows.filter(r=>num(r.fp)!==null||num(r.cap)!==null).map(r=>{ const c=trxBU(t,r); return [r.pos,r.kv||'—',r.i||'—',r.fp||'—',fx(c.f20,3),r.cap||'—',r.capp||'—',fx(c.dv,2),trxLab(c.st)]; });
+    if(bu.length){ tit('Ensaios de fator de potência e capacitância das buchas (C1) – FP ≤ 0,5 %; capacitância ± 5 % da placa'); tb(['Bucha','Tensão (kV)','Corrente (µA)','FP medido (%)','FP a 20 °C (%)','Cap. medida (pF)','Cap. placa (pF)','Desvio (%)','Resultado'],bu); }
+    return y; },
+  excelRows(e){ const t=trxOf(e), out=[];
+    t.ttr.forEach(b=>b.rows.forEach(r=>{ const c=trxTTR(t,b,r); if(c.med===null) return; out.push([`TTR – tap ${b.tap||'—'} – ${r.pos}`,r.med,`teórica ${fx(c.teo.v,4)} · erro ${fx(c.err,3)} % (≤ ± 0,5 %)`,trxLab(c.st),c.st]); }));
+    t.ro.blocos.forEach(b=>{ const c=trxRO(t,b); b.rows.forEach((r,i)=>{ const x=c.rows[i]; if(x.m.v===null) return; out.push([`Resist. ôhmica – tap ${b.tap||'—'} – ${r.pos}`,fx(x.m.v,3)+' '+(r.mu||'Ω'),`corrigido ${fx(x.c,3)} ${r.mu||'Ω'} · erro ${fx(x.err,2)} % (± ${fmtN(trxTolRO(t))} %)`,trxLab(x.st),x.st]); }); });
+    t.fp.rows.forEach(r=>{ const c=trxFP(e,t,r); if(c.st===null) return; out.push([`Fator de potência – ${r.modo}`,(r.fp||'—')+' %',`a 20 °C: ${fx(c.f20,3)} % (≤ ${fmtN(c.lim[0])} %)`,trxLab(c.st),c.st]); });
+    t.bu.rows.forEach(r=>{ const c=trxBU(t,r); if(c.st===null) return; out.push([`Bucha ${r.pos} – FP / capacitância`,[r.fp&&r.fp+' %',r.cap&&r.cap+' pF'].filter(Boolean).join(' / '),`FP ≤ 0,5 % · desvio ${fx(c.dv,2)} % (± 5 %)`,trxLab(c.st),c.st]); });
+    return out; },
+};
+function avaliarTRX(e){ const t=trxOf(e), out=[]; const pior=(a,b)=>!a?b:!b?a:(RANK_RES[a]>=RANK_RES[b]?a:b);
+  let mx=null, st=null, nm=''; t.ttr.forEach(b=>b.rows.forEach(r=>{ const c=trxTTR(t,b,r); if(c.err===null) return; if(mx===null||Math.abs(c.err)>Math.abs(mx)){ mx=c.err; nm=`tap ${b.tap||'—'} ${r.pos}`; } st=pior(st,c.st); }));
+  if(mx!==null) out.push({label:`Relação de transformação – maior erro (${nm})`, val:fx(mx,3)+' %', lim:'≤ ± 0,5 %', st});
+  t.ro.blocos.forEach(b=>{ const c=trxRO(t,b); if(c.maxErr===null) return; const tl=trxTolRO(t); out.push({label:`Resistência ôhmica – tap ${b.tap||'—'} – maior erro em relação à média`, val:fx(c.maxErr,2)+' %', lim:'≤ ± '+fmtN(tl)+' %', st:trxSt(c.maxErr,tl,tl*1.5)}); });
+  t.fp.rows.forEach(r=>{ const c=trxFP(e,t,r); if(c.st===null) return; out.push({label:`Fator de potência ${r.modo} (20 °C)`, val:fx(c.f20!==null?c.f20:num(r.fp),3)+' %', lim:'≤ '+fmtN(c.lim[0])+' %', st:c.st}); });
+  t.bu.rows.forEach(r=>{ const c=trxBU(t,r); if(c.st===null) return; out.push({label:`Bucha ${r.pos} – FP${c.dv!==null?' e capacitância':''}`, val:[c.f20!==null?fx(c.f20,3)+' %':(r.fp?r.fp+' %':''),c.dv!==null?fx(c.dv,1)+' % cap.':''].filter(Boolean).join(' · '), lim:'FP ≤ 0,5 % · cap. ± 5 %', st:c.st}); });
+  return out; }
+/* tela */
+function trxRender(){ const e=TRE, box=document.getElementById('trx'); if(!e||!box) return; const t=trxOf(e), L=TRX_POS[t.lig]||TRX_POS.Dyn1;
+  const inp=(p,v,w)=>`<input data-tp="${p}" value="${esc(v??'')}" ${DEC} style="min-width:${w||70}px">`;
+  const txt=(p,v,w)=>`<input data-tp="${p}" value="${esc(v??'')}" style="min-width:${w||110}px">`;
+  const selU=(p,v,ops)=>`<select data-tp="${p}">${ops.map(o=>`<option ${o===v?'selected':''}>${o}</option>`).join('')}</select>`;
+  const x=(a)=>`<button class="x" data-tx="${a}" title="Remover">✕</button>`;
+  let h=`<div class="card"><div class="grid">
+    <div><label>Ligação (posições e relação teórica)</label>${selU('lig',t.lig,Object.keys(TRX_POS))}</div>
+    <div><label>Tensão BT nominal (V)</label>${inp('vbt',t.vbt)}</div></div>
+    <div class="note">A relação teórica de cada tap é calculada pela tensão AT do tap, a tensão BT e a ligação; pode ser digitada se preferir.</div>`;
+  /* TTR */
+  h+=`<div class="tt">Relação de transformação (TTR) <button class="lbtn" data-tadd="ttr">+ Adicionar tap</button></div>`;
+  t.ttr.forEach((b,bi)=>{ h+=`<div class="tw"><table><tr><th>Tap</th><th>Tensão AT do tap (V)</th><th></th></tr><tr><td>${inp(`ttr.${bi}.tap`,b.tap,50)}</td><td>${inp(`ttr.${bi}.vat`,b.vat,110)}</td><td>${x(`ttr.${bi}`)}</td></tr></table>
+    <table><tr><th>Posição</th><th>Rel. teórica</th><th>Rel. medida</th><th>Erro (%)</th><th>Resultado</th><th></th></tr>${b.rows.map((r,ri)=>`<tr><td>${txt(`ttr.${bi}.rows.${ri}.pos`,r.pos,130)}</td><td>${inp(`ttr.${bi}.rows.${ri}.teo`,r.teo,80)}</td><td>${inp(`ttr.${bi}.rows.${ri}.med`,r.med,80)}</td><td class="c" data-c="ttr.${bi}.${ri}.e"></td><td class="c" data-c="ttr.${bi}.${ri}.s"></td><td>${x(`ttr.${bi}.rows.${ri}`)}</td></tr>`).join('')}</table>
+    <div class="row" style="padding:4px 6px"><button class="lbtn" data-radd="ttr.${bi}">+ Linha</button></div></div>`; });
+  if(!t.ttr.length) h+=`<div class="note">Nenhum tap. Toque em “+ Adicionar tap”: entram as 3 posições da ligação ${esc(t.lig)}.</div>`;
+  /* resistência ôhmica */
+  h+=`<div class="tt">Resistência ôhmica dos enrolamentos <span class="row" style="gap:6px"><button class="lbtn" data-tadd="roat">+ Tap (AT)</button><button class="lbtn" data-tadd="robt">+ Enrolamento BT</button></span></div>
+   <div class="grid"><div><label>Material</label>${selU('ro.mat',t.ro.mat,Object.keys(TRX_MAT))}</div><div><label>Temperatura na medição (°C)</label>${inp('ro.temp',t.ro.temp)}</div><div><label>Corrigir para (°C)</label>${inp('ro.ref',t.ro.ref)}</div><div><label>Tolerância do erro (%)</label>${inp('ro.tol',t.ro.tol??'1')}</div></div>`;
+  t.ro.blocos.forEach((b,bi)=>{ h+=`<div class="tw"><table><tr><th>Tap</th><th></th></tr><tr><td>${txt(`ro.blocos.${bi}.tap`,b.tap,60)}</td><td>${x(`ro.blocos.${bi}`)}</td></tr></table>
+    <table><tr><th>Posição</th><th>Tensão</th><th></th><th>Corrente (A)</th><th>Medido</th><th></th><th>Corrigido</th><th>Erro (%)</th><th>Resultado</th><th></th></tr>${b.rows.map((r,ri)=>`<tr><td>${txt(`ro.blocos.${bi}.rows.${ri}.pos`,r.pos,80)}</td><td>${inp(`ro.blocos.${bi}.rows.${ri}.v`,r.v)}</td><td>${selU(`ro.blocos.${bi}.rows.${ri}.vu`,r.vu||'V',['V','mV'])}</td><td>${inp(`ro.blocos.${bi}.rows.${ri}.i`,r.i)}</td><td>${inp(`ro.blocos.${bi}.rows.${ri}.med`,r.med)}</td><td>${selU(`ro.blocos.${bi}.rows.${ri}.mu`,r.mu||'Ω',['Ω','mΩ'])}</td><td class="c" data-c="ro.${bi}.${ri}.c"></td><td class="c" data-c="ro.${bi}.${ri}.e"></td><td class="c" data-c="ro.${bi}.${ri}.s"></td><td>${x(`ro.blocos.${bi}.rows.${ri}`)}</td></tr>`).join('')}</table>
+    <div class="row" style="padding:4px 6px"><button class="lbtn" data-radd="ro.${bi}">+ Linha</button></div></div>`; });
+  h+=`<div class="note">Erro de cada linha em relação à média das fases do mesmo tap; aprovado até a tolerância (padrão XPA ± 1 %), atenção até 1,5 × a tolerância. Sem o valor medido, o app usa tensão ÷ corrente.</div>`;
+  /* fator de potência */
+  h+=`<div class="tt">Fator de potência do transformador <button class="lbtn" data-radd="fp">+ Linha</button></div>
+   <div class="grid"><div><label>Temperatura do ensaio (°C)</label>${inp('fp.temp',t.fp.temp)}</div><div><label>Fator de correção para 20 °C (opcional)</label>${inp('fp.k',t.fp.k)}</div></div>
+   <div class="tw"><table><tr><th>Modo</th><th>Tensão (kV)</th><th>Corrente (mA)</th><th>FP medido (%)</th><th>FP 20 °C (%)</th><th>Cap. (pF)</th><th>Resultado</th><th></th></tr>${t.fp.rows.map((r,ri)=>`<tr><td>${txt(`fp.rows.${ri}.modo`,r.modo,70)}</td><td>${inp(`fp.rows.${ri}.kv`,r.kv)}</td><td>${inp(`fp.rows.${ri}.i`,r.i)}</td><td>${inp(`fp.rows.${ri}.fp`,r.fp)}</td><td>${inp(`fp.rows.${ri}.fp20`,r.fp20)}</td><td>${inp(`fp.rows.${ri}.cap`,r.cap)}</td><td class="c" data-c="fp.${ri}.s"></td><td>${x(`fp.rows.${ri}`)}</td></tr>`).join('')}</table></div>`;
+  /* buchas */
+  h+=`<div class="tt">Capacitância e fator de potência das buchas <button class="lbtn" data-radd="bu">+ Bucha</button></div>
+   <div class="tw"><table><tr><th>Bucha</th><th>Tensão (kV)</th><th>Corrente (µA)</th><th>FP medido (%)</th><th>FP 20 °C (%)</th><th>Cap. medida (pF)</th><th>Cap. placa (pF)</th><th>Desvio (%)</th><th>Resultado</th><th></th></tr>${t.bu.rows.map((r,ri)=>`<tr><td>${txt(`bu.rows.${ri}.pos`,r.pos,50)}</td><td>${inp(`bu.rows.${ri}.kv`,r.kv)}</td><td>${inp(`bu.rows.${ri}.i`,r.i)}</td><td>${inp(`bu.rows.${ri}.fp`,r.fp)}</td><td>${inp(`bu.rows.${ri}.fp20`,r.fp20)}</td><td>${inp(`bu.rows.${ri}.cap`,r.cap)}</td><td>${inp(`bu.rows.${ri}.capp`,r.capp)}</td><td class="c" data-c="bu.${ri}.d"></td><td class="c" data-c="bu.${ri}.s"></td><td>${x(`bu.rows.${ri}`)}</td></tr>`).join('')}</table></div>
+   <div class="note">FP: óleo ≤ 0,5 % (atenção até 1,0 %), seco ≤ 2,0 %. Buchas: FP ≤ 0,5 %; capacitância ± 5 % da placa. Sem o FP a 20 °C, o app usa o fator de correção.</div></div>`;
+  box.innerHTML=h;
+  const get=(p)=>p.split('.').reduce((o,k)=>o==null?o:o[k],t);
+  box.querySelectorAll('[data-tp]').forEach(el=>{ const fn=()=>{ const ps=el.dataset.tp.split('.'); const last=ps.pop(); const o=ps.length?get(ps.join('.')):t; o[last]=el.value; saveCur(); if(el.dataset.tp==='lig') trxRender(); else trxCalc(); TRREF(); }; el.oninput=fn; el.onchange=fn; });
+  box.querySelectorAll('[data-tx]').forEach(b=>b.onclick=()=>{ const ps=b.dataset.tx.split('.'); const i=+ps.pop(); const arr=get(ps.join('.')); confirmBox('Remover esta linha / tap?',()=>{ arr.splice(i,1); saveCur(); trxRender(); TRREF(); }); });
+  box.querySelectorAll('[data-tadd]').forEach(b=>b.onclick=()=>{ const k=b.dataset.tadd; const Lc=TRX_POS[t.lig]||TRX_POS.Dyn1;
+    if(k==='ttr'){ const ult=t.ttr[t.ttr.length-1]; const n=ult&&num(ult.tap)!==null?String(num(ult.tap)+1):String(t.ttr.length+1); t.ttr.push({tap:n,vat:'',rows:Lc.ttr.map(p=>({pos:p,teo:'',med:''}))}); }
+    if(k==='roat'){ const ats=t.ro.blocos.filter(x=>x.tap!=='BT'); const ult=ats[ats.length-1]; const n=ult&&num(ult.tap)!==null?String(num(ult.tap)+1):String(ats.length+1);
+      const pos=t.ro.blocos.findIndex(x=>x.tap==='BT'); const nb={tap:n,rows:Lc.at.map(p=>({pos:p,v:'',vu:'V',i:'',med:'',mu:'Ω'}))}; if(pos>=0) t.ro.blocos.splice(pos,0,nb); else t.ro.blocos.push(nb); }
+    if(k==='robt') t.ro.blocos.push({tap:'BT',rows:Lc.bt.map(p=>({pos:p,v:'',vu:'mV',i:'',med:'',mu:'mΩ'}))});
+    saveCur(); trxRender(); TRREF(); });
+  box.querySelectorAll('[data-radd]').forEach(b=>b.onclick=()=>{ const [k,bi]=b.dataset.radd.split('.');
+    if(k==='ttr') t.ttr[+bi].rows.push({pos:'',teo:'',med:''});
+    if(k==='ro'){ const bl=t.ro.blocos[+bi]; const u=bl.rows[bl.rows.length-1]||{}; bl.rows.push({pos:'',v:'',vu:u.vu||'V',i:'',med:'',mu:u.mu||'Ω'}); }
+    if(k==='fp') t.fp.rows.push({modo:'',kv:'',i:'',fp:'',fp20:'',cap:''});
+    if(k==='bu') t.bu.rows.push({pos:'',kv:'',i:'',fp:'',fp20:'',cap:'',capp:''});
+    saveCur(); trxRender(); TRREF(); });
+  trxCalc(); }
+function trxCalc(){ const e=TRE, box=document.getElementById('trx'); if(!e||!box) return; const t=trxOf(e);
+  const set=(k,txt,st)=>{ const c=box.querySelector(`[data-c="${k}"]`); if(!c) return; c.innerHTML=st!==undefined?(st?pill(st==='att'?'warn':st==='nc'?'bad':'ok',trxLab(st)):'—'):txt; };
+  t.ttr.forEach((b,bi)=>b.rows.forEach((r,ri)=>{ const c=trxTTR(t,b,r); set(`ttr.${bi}.${ri}.e`,fx(c.err,3)); set(`ttr.${bi}.${ri}.s`,'',c.st);
+    const ti=box.querySelector(`[data-tp="ttr.${bi}.rows.${ri}.teo"]`); if(ti) ti.placeholder=c.teo.auto?fx(c.teo.v,4):''; }));
+  t.ro.blocos.forEach((b,bi)=>{ const c=trxRO(t,b); b.rows.forEach((r,ri)=>{ const x=c.rows[ri]; set(`ro.${bi}.${ri}.c`,x.c!==null?fx(x.c,3)+' '+(r.mu||'Ω'):'—'); set(`ro.${bi}.${ri}.e`,fx(x.err,2)); set(`ro.${bi}.${ri}.s`,'',x.st);
+    const mi=box.querySelector(`[data-tp="ro.blocos.${bi}.rows.${ri}.med"]`); if(mi) mi.placeholder=x.m.auto?trxPH(x.m):''; }); });
+  t.fp.rows.forEach((r,ri)=>{ const c=trxFP(e,t,r); set(`fp.${ri}.s`,'',c.st); const fi=box.querySelector(`[data-tp="fp.rows.${ri}.fp20"]`); if(fi) fi.placeholder=c.auto?fx(c.f20,3):''; });
+  t.bu.rows.forEach((r,ri)=>{ const c=trxBU(t,r); set(`bu.${ri}.d`,fx(c.dv,2)); set(`bu.${ri}.s`,'',c.st); const fi=box.querySelector(`[data-tp="bu.rows.${ri}.fp20"]`); if(fi) fi.placeholder=c.auto?fx(c.f20,3):''; });
+}
+
 const TIPOS={
- TR:{nome:'Transformador de força', grupo:'MT/AT', icone:'⚡',
-  campos:[['pot','Potência (kVA)'],['un','Tensão AT (kV)'],['ub','Tensão BT (kV)'],['isol','Isolação',['Óleo','Seco']],['in','Corrente nominal BT (A)'],['grupo','Grupo de ligação / TAP']],
+ TR:{nome:'Transformador de força', grupo:'MT/AT', icone:'⚡', ext:TR_EXT,
+  campos:[['pot','Potência (kVA)'],['un','Tensão AT (kV)'],['ub','Tensão BT (kV)'],['isol','Isolação',['Óleo','Seco']],['in','Corrente nominal BT (A)'],['grupo','Grupo de ligação / TAP'],
+          ['taps','Tensões dos taps AT (V)'],['z','Impedância a 75 °C (%)'],['massa','Massa total (kg)'],['oleo_vol','Volume de óleo (L)']],
   items:[
    ['nivel','Nível de óleo no indicador / conservador','NBR 5356-1','B'],
    ['vaz','Vazamentos de óleo (tanque, radiadores, buchas, válvulas, gaxetas)','NBR 5356-1','B'],
@@ -370,13 +505,13 @@ const TIPOS={
    ['placa','Placa de identificação legível','NBR 5356-1','C'],
   ],
   meds:[
-   {g:'Resistência de isolamento (MΩ)', f:[['ri_atm','AT – massa'],['ri_atbt','AT – BT'],['ri_btm','BT – massa'],['ip','Índice de polarização (10 min / 1 min)'],['ri_temp','Temperatura do ensaio (°C)']], note:'Referência: NETA MTS Tab. 100.5 (a 20 °C) e IEEE C57.152. IP ≥ 1,25 bom; < 1,0 investigar.'},
-   {g:'Relação de transformação (TTR)', f:[['ttr_tap','Tap ensaiado','txt'],['rel_r','Desvio fase R / H1 (%)'],['rel_s','Desvio fase S / H2 (%)'],['rel_t','Desvio fase T / H3 (%)'],['rel_desvio','Maior desvio de todos os taps (%)']], note:'Desvio aceitável: ≤ 0,5 % (NBR 5356-1). Informe o desvio por fase no tap nominal e o maior desvio encontrado nos demais taps.'},
+   {g:'Resistência de isolamento (MΩ)', f:[['ri_atm','AT – massa'],['ri_atbt','AT – BT'],['ri_btm','BT – massa'],['ip','Índice de polarização (10 min / 1 min)'],['ri_temp','Temperatura do ensaio (°C)'],['ri_v','Tensão aplicada (kVcc)'],['ri_dur','Duração (min)']], note:'Referência: NETA MTS Tab. 100.5 (a 20 °C) e IEEE C57.152. IP ≥ 1,25 bom; < 1,0 investigar.'},
+   {legado:true, quando:d=>!d._planilha, naMotivo:'Registrado na planilha por tap', g:'Relação de transformação (TTR)', f:[['ttr_tap','Tap ensaiado','txt'],['rel_r','Desvio fase R / H1 (%)'],['rel_s','Desvio fase S / H2 (%)'],['rel_t','Desvio fase T / H3 (%)'],['rel_desvio','Maior desvio de todos os taps (%)']], note:'Desvio aceitável: ≤ 0,5 % (NBR 5356-1). Informe o desvio por fase no tap nominal e o maior desvio encontrado nos demais taps.'},
    {id:'exc', g:'Corrente de excitação (mA)', f:[['exc_v','Tensão de ensaio (kV)'],['exc_r','Fase R / H1'],['exc_s','Fase S / H2'],['exc_t','Fase T / H3']], note:'Padrão esperado: duas fases externas semelhantes e a central menor. Desvio entre as fases externas ≤ 10 % (IEEE C57.152 / NETA MTS – critério adotado).'},
-   {g:'Resistência ôhmica dos enrolamentos AT (mΩ)', f:[['ro_r','Fase R'],['ro_s','Fase S'],['ro_t','Fase T']], note:'Desvio entre fases ≤ 2 % (NBR 5356-1 / NETA).'},
-   {id:'robt', g:'Resistência ôhmica dos enrolamentos BT (mΩ)', f:[['rob_r','Fase R'],['rob_s','Fase S'],['rob_t','Fase T']], note:'Desvio entre fases ≤ 2 % (NBR 5356-1 / NETA).'},
-   {id:'fp', g:'Fator de potência do isolamento – tan δ (%)', f:[['fp_ch','CH (AT – massa)'],['fp_cl','CL (BT – massa)'],['fp_chl','CHL (AT – BT)'],['fp_temp','Temperatura do ensaio (°C)']], note:'Valores corrigidos a 20 °C. Óleo: ≤ 0,5 % bom; 0,5 a 1,0 % atenção; > 1,0 % não conforme. Seco: ≤ 2,0 % bom; 2,0 a 3,0 % atenção (IEEE C57.152 – critério adotado).'},
-   {id:'buchas', g:'Buchas – fator de potência e capacitância', f:[['fpb_h1','FP bucha H1 (%)'],['fpb_h2','FP bucha H2 (%)'],['fpb_h3','FP bucha H3 (%)'],['cpb_h1','Desvio de capacitância H1 x placa (%)'],['cpb_h2','Desvio de capacitância H2 x placa (%)'],['cpb_h3','Desvio de capacitância H3 x placa (%)']], note:'Buchas capacitivas (C1). FP ≤ 0,5 % bom; até 1,0 % atenção; > 1,0 % não conforme. Capacitância: desvio ≤ 5 % bom; até 10 % atenção; > 10 % não conforme (IEEE C57.19.100 / NETA MTS – critério adotado).'},
+   {legado:true, quando:d=>!d._planilha, naMotivo:'Registrado na planilha por tap', g:'Resistência ôhmica dos enrolamentos AT (mΩ)', f:[['ro_r','Fase R'],['ro_s','Fase S'],['ro_t','Fase T']], note:'Desvio entre fases ≤ 2 % (NBR 5356-1 / NETA).'},
+   {id:'robt', legado:true, quando:d=>!d._planilha, naMotivo:'Registrado na planilha por tap', g:'Resistência ôhmica dos enrolamentos BT (mΩ)', f:[['rob_r','Fase R'],['rob_s','Fase S'],['rob_t','Fase T']], note:'Desvio entre fases ≤ 2 % (NBR 5356-1 / NETA).'},
+   {id:'fp', legado:true, quando:d=>!d._planilha, naMotivo:'Registrado na planilha por tap', g:'Fator de potência do isolamento – tan δ (%)', f:[['fp_ch','CH (AT – massa)'],['fp_cl','CL (BT – massa)'],['fp_chl','CHL (AT – BT)'],['fp_temp','Temperatura do ensaio (°C)']], note:'Valores corrigidos a 20 °C. Óleo: ≤ 0,5 % bom; 0,5 a 1,0 % atenção; > 1,0 % não conforme. Seco: ≤ 2,0 % bom; 2,0 a 3,0 % atenção (IEEE C57.152 – critério adotado).'},
+   {id:'buchas', legado:true, quando:d=>!d._planilha, naMotivo:'Registrado na planilha por tap', g:'Buchas – fator de potência e capacitância', f:[['fpb_h1','FP bucha H1 (%)'],['fpb_h2','FP bucha H2 (%)'],['fpb_h3','FP bucha H3 (%)'],['cpb_h1','Desvio de capacitância H1 x placa (%)'],['cpb_h2','Desvio de capacitância H2 x placa (%)'],['cpb_h3','Desvio de capacitância H3 x placa (%)']], note:'Buchas capacitivas (C1). FP ≤ 0,5 % bom; até 1,0 % atenção; > 1,0 % não conforme. Capacitância: desvio ≤ 5 % bom; até 10 % atenção; > 10 % não conforme (IEEE C57.19.100 / NETA MTS – critério adotado).'},
    {id:'dga', quando:d=>d.isol!=='Seco', naMotivo:'Não se aplica: transformador a seco', g:'Cromatografia do óleo – gases dissolvidos (ppm)', f:[['g_h2','Hidrogênio (H2)'],['g_ch4','Metano (CH4)'],['g_c2h6','Etano (C2H6)'],['g_c2h4','Etileno (C2H4)'],['g_c2h2','Acetileno (C2H2)'],['g_co','Monóxido de carbono (CO)'],['g_co2','Dióxido de carbono (CO2)'],['dga_lab','Laboratório / nº do laudo','txt']], note:'IEEE C57.104 – limites da Condição 1 (normal): H2 100 · CH4 120 · C2H6 65 · C2H4 50 · C2H2 1 · CO 350 · CO2 2500 · TDCG 720 ppm. Acima da Condição 2: não conforme.'},
    {id:'fq', quando:d=>d.isol!=='Seco', naMotivo:'Não se aplica: transformador a seco', g:'Óleo isolante – análise físico-química', f:[['oq_agua','Teor de água (ppm)'],['oq_acid','Índice de neutralização (mg KOH/g)'],['oq_tif','Tensão interfacial (mN/m)'],['oq_fp90','Fator de perdas a 90 °C (%)'],['oq_cor','Cor (ASTM)','txt'],['oq_lab','Laboratório / nº do laudo','txt']], note:'Critério adotado (IEC 60422 / NBR 10576, equipamentos até 72,5 kV): água ≤ 30 ppm; acidez ≤ 0,15 mg KOH/g; tensão interfacial ≥ 28 mN/m; fator de perdas a 90 °C ≤ 10 %.'},
    {g:'Óleo isolante e temperaturas', f:[['rig','Rigidez dielétrica do óleo (kV)'],['t_oleo','Temperatura do óleo (°C)'],['t_enr','Temperatura do enrolamento (°C)']], note:'Rigidez: ≥ 40 kV bom; 30–40 kV atenção; < 30 kV não conforme (NBR 10576 / IEC 60422, ≤ 72,5 kV). Elevação do óleo ≤ 55 K.'},
@@ -519,6 +654,22 @@ const TIPOS={
    {id:'passo', g:'Tensões de passo e toque (V)', f:[['vp_max','Maior tensão de passo (V)'],['vt_max','Maior tensão de toque (V)'],['i_inj','Corrente injetada (A)'],['i_falta','Corrente de falta de projeto (kA)']], note:'Valores referidos à corrente de falta de projeto e comparados aos admissíveis calculados (NBR 15751 / IEEE 80). Informe os admissíveis nos dados do equipamento.'},
    {id:'rho', g:'Resistividade do solo – Wenner (Ω·m)', f:[['rho_2','a = 2 m'],['rho_4','a = 4 m'],['rho_8','a = 8 m'],['rho_16','a = 16 m']], note:'Método de Wenner (NBR 7117). Registro para o projeto e o histórico.'},
   ]},
+ RA:{nome:'Resistor de aterramento do neutro', grupo:'Aterramento', icone:'🟫',
+  campos:[['un','Tensão nominal (kV)'],['in','Corrente nominal (A)'],['rn','Resistência nominal (Ω)'],['tn','Tempo nominal (s)']],
+  items:[
+   ['bucha','Bucha / isolador de alta: trincas, trilhamento e sujidade','NBR 14039','A'],
+   ['aterr','Aterramentos do invólucro e do resistor','NBR 14039','A'],
+   ['cabo','Cabo de aterramento: integridade e conexões','NBR 15751','A'],
+   ['reaperto','Reaperto das conexões','NETA MTS','B'],
+   ['elem','Elementos resistivos: oxidação, deformação e sinais de aquecimento','IEEE C57.32','B'],
+   ['pint','Pintura, corrosão e vedação do invólucro','NBR 5462','C'],
+   ['limpeza','Limpeza geral','Fabricante','C'],
+   ['placa','Placa de identificação legível','IEEE C57.32','C'],
+  ],
+  meds:[
+   {g:'Resistência de isolamento (MΩ)', f:[['ra_ri','Alta – terra'],['ra_riv','Tensão aplicada (kVcc)'],['ra_dur','Duração (min)']], note:'Referência: NETA MTS Tab. 100.1 pela tensão nominal.'},
+   {g:'Resistência ôhmica do resistor (Ω)', f:[['ra_r','Resistência medida (Ω)'],['ra_i','Corrente aplicada (A)'],['ra_t','Temperatura (°C)']], note:'Erro em relação à resistência nominal ≤ ± 10 % (IEEE C57.32).'},
+  ]},
  CG:{nome:'Civil, segurança e documentação', grupo:'Geral', icone:'🏗️',
   campos:[['desc','Descrição']],
   items:[
@@ -554,7 +705,7 @@ TIPOS.RP={nome:'Relé de proteção (ensaio por injeção)', grupo:'Proteção',
   meds:[
    {g:'Teste de trip real (relé + disjuntor)', f:[['t_trip','Tempo total de abertura medido (ms)'],['t_ref','Tempo esperado (ms)']], note:'Tempo medido até 10 % acima do esperado: conforme. Os ensaios das funções ANSI ficam na seção abaixo.'},
   ]};
-const TIPOS_ORD=['TR','DJ','SC','PR','TI','BM','QB','RP','PC','AT','CG'];
+const TIPOS_ORD=['TR','DJ','SC','PR','TI','BM','QB','RP','PC','AT','RA','CG'];
 function avaliarMeds(e,h){
   const T=TIPOS[e.tipo], m=e.m||{}, d=e.d||{}, out=[];
   const v=(k)=>num(m[k]);
@@ -569,6 +720,11 @@ function avaliarMeds(e,h){
     const rig=v('rig'); if(rig!==null) add('Rigidez dielétrica do óleo',rig,'kV',{st:rig>=40?'ok':rig>=30?'att':'nc',lim:'≥ 40 kV'});
     const to=v('t_oleo'), ta=num(h.tamb); if(to!==null){ const el=ta!==null?to-ta:null; add('Temperatura do óleo'+(el!==null?' (elevação '+f1(el,0)+' K)':''),to,'°C',el!==null?{st:el<=45?'ok':el<=55?'att':'nc',lim:'elev. ≤ 55 K'}:null); }
     const te=v('t_enr'); if(te!==null) add('Temperatura do enrolamento',te,'°C',{st:te<=95?'ok':te<=105?'att':'nc',lim:'≤ 105 °C'});
+    avaliarTRX(e).forEach(x=>out.push(x));
+  }
+  if(e.tipo==='RA'){
+    const ri=v('ra_ri'), lim=limRI(volts); if(ri!==null) add('Resistência de isolamento alta – terra',ri,'MΩ',evMin(ri,lim,'MΩ'));
+    const r=v('ra_r'), rn=num(d.rn); if(r!==null){ const er=rn?(r-rn)/rn*100:null; add('Resistência ôhmica do resistor'+(er!==null?' (erro '+fx(er,1)+' %)':''),r,'Ω',er!==null?{st:Math.abs(er)<=10?'ok':Math.abs(er)<=15?'att':'nc',lim:fmtN(rn)+' Ω ± 10 %'}:null); }
   }
   if(e.tipo==='DJ'||e.tipo==='SC'||e.tipo==='BM'||e.tipo==='PR'){
     const lim=e.tipo==='PR'?1000:limRI(volts);

@@ -89,7 +89,7 @@ function jobFields(h){
   ${field('obs','Observações gerais',h,'textarea')}</div>`;
 }
 criarModuloChecklist({
-  k:'motores', nome:'Inspeção de motores elétricos', curto:'Motores', icone:'⚙️',
+  k:'motores', nome:'Inspeção e testes de motores elétricos', curto:'Motores – testes', icone:'⚙️',
   desc:'Motores de indução – checklist mecânico/elétrico, isolamento (IP/DAR), ôhmica, corrente, temperatura e vibração.',
   TIPOS, TIPOS_ORD:['MIT'], avaliar, itemNome:'motor', itemNomePl:'motores', hTitulo:'local', lblLocal:'Localização / equipamento acionado',
   novoH:()=>({servico:'Inspeção e ensaios', equipe:'', acompanhante:'', os:'', tamb:'', umid:'', instrumentos:''}), jobFields,

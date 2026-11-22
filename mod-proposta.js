@@ -500,7 +500,7 @@ async function canvasBytes(c, type, q) { const bl = await new Promise(r => c.toB
 async function imagens() {
   if (IMGCACHE) return IMGCACHE;
   const c = document.createElement('canvas'); c.width = 1654; c.height = 2339; const g = c.getContext('2d'); g.fillStyle = '#0A1733'; g.fillRect(0, 0, c.width, c.height);
-  try { const im = await imgEl(COVER_TOP); g.drawImage(im, 0, 0, c.width, c.width * 124.7 / 210); } catch (e) {}
+  try { const im = await imgEl(typeof COVER_FULL !== 'undefined' ? COVER_FULL : COVER_TOP); if (typeof COVER_FULL !== 'undefined') g.drawImage(im, 0, 0, c.width, c.height); else g.drawImage(im, 0, 0, c.width, c.width * 124.7 / 210); } catch (e) {}
   const cover = await canvasBytes(c, 'image/jpeg', 0.88); g.fillStyle = '#0A1733'; g.fillRect(0, 0, c.width, c.height); const back = await canvasBytes(c, 'image/png');
   IMGCACHE = { cover, back, logoCor: bytesDe(LOGO_COR), logoBranco: bytesDe(LOGO_BRANCO) }; return IMGCACHE;
 }

@@ -45,15 +45,17 @@ function criarModuloChecklist(cfg){
   const worst=(a,b)=>{ if(!a) return b; if(!b) return a; return RANK_RES[a]>=RANK_RES[b]?a:b; };
   /* ---------- ensaios previstos: cada grupo de medições pode ser desmarcado (e.ensOff[gid] = motivo) ---------- */
   const gidOf=g=>g.id||slug(g.g);
+  /* grupos 'legado': só aparecem em itens antigos (quando a condição deixa de valer, somem por completo) */
+  const medsDe=(e,T)=>(T.meds||[]).filter(g=>!(g.legado&&g.quando&&!g.quando(e.d||{})));
   const has=(o,k)=>!!(o&&Object.prototype.hasOwnProperty.call(o,k));
   const naAuto=(e,g)=>!!(g.quando&&!g.quando(e.d||{})&&!has(e.ensOn,gidOf(g)));
   const ensOff=(e,g)=>has(e.ensOff,gidOf(g))||naAuto(e,g);
   const motivoOff=(e,g)=>{ const v=has(e.ensOff,gidOf(g))?String(e.ensOff[gidOf(g)]||'').trim():''; return v||(naAuto(e,g)?(g.naMotivo||'Não se aplica a este equipamento'):''); };
   function mFilt(e,T){ if(!e.ensOff||!Object.keys(e.ensOff).length) return e;
-    const off=new Set((T.meds||[]).filter(g=>ensOff(e,g)).flatMap(g=>g.f.map(f=>f[0])));
+    const off=new Set(medsDe(e,T).filter(g=>ensOff(e,g)).flatMap(g=>g.f.map(f=>f[0])));
     const m={}; for(const [k,v] of Object.entries(e.m||{})) if(!off.has(k)) m[k]=v; return Object.assign({},e,{m}); }
   const temValor=(e,g)=>g.f.some(f=>{ const v=(e.m||{})[f[0]]; return v!==undefined&&v!==null&&String(v).trim()!==''; });
-  function ensStatus(e,T){ const gs=comMeds?(T.meds||[]):[]; const on=gs.filter(g=>!ensOff(e,g)); return {total:gs.length, prev:on.length, feitos:on.filter(g=>temValor(e,g)).length, pend:on.filter(g=>!temValor(e,g)), off:gs.filter(g=>ensOff(e,g))}; }
+  function ensStatus(e,T){ const gs=comMeds?medsDe(e,T):[]; const on=gs.filter(g=>!ensOff(e,g)); return {total:gs.length, prev:on.length, feitos:on.filter(g=>temValor(e,g)).length, pend:on.filter(g=>!temValor(e,g)), off:gs.filter(g=>ensOff(e,g))}; }
   const quem=()=>(typeof window.quemSou==='function'?window.quemSou():'');
   const fmtQuando=(t)=>{ if(!t) return ''; const d=new Date(t); return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); };
   /* quem registrou cada medição: e.medPor[campo] = {por, at} */
@@ -130,12 +132,12 @@ function criarModuloChecklist(cfg){
     const e=ITEM, d=e.d, T=TIPOS[e.tipo]; e.items=e.items||{}; e.m=e.m||{}; e.pantes=e.pantes||[]; e.pdepois=e.pdepois||[]; e.photos=e.photos||[];
     const idx=CUR.items.indexOf(e)+1;
     const campo=(c)=>c[2]&&Array.isArray(c[2])?sel(c[0],c[1],d,c[2]):field(c[0],c[1],d,'text',c[3]?'Padrão: '+c[3]:'',/\(k?V|kVA|kW|\(A\)|\(ms\)|\(h\)|Ω|mA|kA|Vcc|rpm|Hz|°C|elementos|\(%\)/.test(c[1])?DEC:'');
-    const meds=comMeds?(T.meds||[]):[];
+    const meds=comMeds?medsDe(e,T):[];
     $('#app').innerHTML = `<div class="row" style="margin-bottom:8px"><button id="back">‹ ${esc(hTit(CUR.h)||CUR.h.cliente||'Trabalho')}</button></div>
     <div class="card"><div class="result"><div><div style="font-weight:bold;color:var(--navy)" id="rtag">${T.icone} ${idx}. ${esc(eqTitle(e))}</div><div class="note" id="rcalc"></div></div><span class="pill" id="rpill"></span></div>
     <div class="note" id="racao" style="margin-top:6px"></div><div class="prog"><div id="rprog" style="width:0"></div></div></div>
     <div class="sec">Identificação – ${esc(T.nome)}</div>
-    <div class="card" id="ef"><div class="grid">
+    <div class="card" id="ef">${window.lerPlacaBtns?lerPlacaBtns():''}<div class="grid">
       ${field('tag','TAG / identificação',d)}${field('local',cfg.lblLocal||'Localização',d)}
       ${field('fab','Fabricante',d)}${field('modelo','Modelo / tipo',d)}
       ${field('serie','Nº de série',d)}${field('ano','Ano de fabricação',d)}
@@ -212,6 +214,7 @@ function criarModuloChecklist(cfg){
     });
     const drawSlot=(slot)=>{ const arr=slotArr(slot); drawThumbs(slotEl(slot), arr, id=>{ const a=slotArr(slot); a.splice(a.indexOf(id),1); }); };
     ['pantes','pdepois','photos'].concat(T.ext&&comMeds?(T.ext.slots||[]):[]).forEach(s=>{ if(!e[s]) e[s]=[]; drawSlot(s); });
+    if(window.lerPlacaBind) lerPlacaBind(e,T,()=>drawSlot('photos'));
     if(T.ext&&comMeds) T.ext.bind(e,refreshCalc);
     T.items.forEach(it=>{ if((e.items[it[0]]||{}).photos?.length) drawSlot('item:'+it[0]); });
     refreshCalc();
@@ -298,7 +301,7 @@ function criarModuloChecklist(cfg){
         didParseCell:c=>{ if(c.section==='body'&&c.column.index===0) c.cell.styles.textColor=plano[c.row.index].sev==='A'?C_RES.crit:plano[c.row.index].sev==='B'?C_RES.nc:C_RES.att; }});
     } else { y=ensure(y,20); y=sec('Plano de ação',y); y=para('Não foram registradas não conformidades ou observações.',y); }
     if(comMeds){ const tot=res.reduce((a,x)=>({prev:a.prev+x.ens.prev,feitos:a.feitos+x.ens.feitos,off:a.off+x.ens.off.length}),{prev:0,feitos:0,off:0});
-      const tec={}; eqs.forEach((e,i)=>{ for(const g of (TIPOS[e.tipo].meds||[])){ if(ensOff(e,g)||!temValor(e,g)) continue; const pg=porGrupo(e,g); (pg.nomes.length?pg.nomes:['Não identificado']).forEach(nm=>{ const t=tec[nm]||(tec[nm]={n:0,eq:new Set(),ult:0}); t.n++; t.eq.add(eqName(e,i));
+      const tec={}; eqs.forEach((e,i)=>{ for(const g of medsDe(e,TIPOS[e.tipo])){ if(ensOff(e,g)||!temValor(e,g)) continue; const pg=porGrupo(e,g); (pg.nomes.length?pg.nomes:['Não identificado']).forEach(nm=>{ const t=tec[nm]||(tec[nm]={n:0,eq:new Set(),ult:0}); t.n++; t.eq.add(eqName(e,i));
             for(const f of g.f){ const p=porCampo(e,f[0]); if(p&&p.por===nm) t.ult=Math.max(t.ult,p.at||0); } }); } });
       if(tot.prev){ y=ensure(y,30); y=sec('Ensaios executados',y);
         y=para(`Ensaios previstos: ${tot.prev} · com resultado registrado: ${tot.feitos} · pendentes: ${tot.prev-tot.feitos}${tot.off?` · desmarcados como não realizados: ${tot.off}`:''}.`,y,{size:9});
@@ -328,7 +331,7 @@ function criarModuloChecklist(cfg){
         columnStyles:{0:{cellWidth:70},1:{cellWidth:28,textColor:C_MUT},2:{cellWidth:22,fontStyle:'bold',halign:'center'},3:{cellWidth:10,halign:'center',fontStyle:'bold'}},
         didParseCell:c=>{ if(c.section==='body'&&c.column.index===2){ const st=((e.items||{})[T.items[c.row.index][0]]||{}).s; if(st) c.cell.styles.textColor=C_ST[st]; } }});
       if(comMeds){
-        const mrows=[], mpor=[]; for(const g of (T.meds||[])){ if(ensOff(e,g)) continue; for(const f of g.f){ const v=(e.m||{})[f[0]]; if(v!==undefined&&v!==''){ mrows.push([g.g,f[1],String(v)]); mpor.push(porTxtCampo(e,f[0])); } } }
+        const mrows=[], mpor=[]; for(const g of medsDe(e,T)){ if(ensOff(e,g)) continue; for(const f of g.f){ const v=(e.m||{})[f[0]]; if(v!==undefined&&v!==''){ mrows.push([g.g,f[1],String(v)]); mpor.push(porTxtCampo(e,f[0])); } } }
         const comPor=mpor.some(Boolean);
         if(mrows.length){ y=ensure(y,30); y=tbl({startY:y, head:[['Ensaio','Grandeza','Valor medido'].concat(comPor?['Executado por']:[])], body:comPor?mrows.map((r,k)=>r.concat([mpor[k]])):mrows, styles:{fontSize:7.6,cellPadding:1.3,lineColor:C_LINE,lineWidth:.2,textColor:INK}, columnStyles:Object.assign({0:{cellWidth:comPor?50:62,textColor:C_MUT},2:{cellWidth:comPor?24:30,halign:'right',fontStyle:'bold'}},comPor?{3:{cellWidth:38,textColor:C_MUT,fontSize:7}}:{})}); }
         const offs=r.ens.off; if(offs.length){ y=ensure(y,20); y=tbl({startY:y, head:[['Ensaio não realizado','Motivo']], body:offs.map(g=>[g.g,motivoOff(e,g)||'Não previsto para este equipamento']), styles:{fontSize:7.6,cellPadding:1.3,lineColor:C_LINE,lineWidth:.2,textColor:C_MUT}, columnStyles:{0:{cellWidth:80}}}); }
@@ -411,7 +414,7 @@ function criarModuloChecklist(cfg){
       w4.columns=[6,22,26,40,18,26,14,30].map(w=>({width:w}));
       r=head(w4,'MEDIÇÕES, ENSAIOS E AVALIAÇÃO',7,SUB); tableHeader(w4,r,['Nº',INcap,'Tipo','Grandeza','Valor','Limite de referência','Resultado','Executado por']); r++;
       eqs.forEach((e,i)=>{ const T=TIPOS[e.tipo];
-        for(const g of (T.meds||[])){ if(ensOff(e,g)){ cellRow(w4,r,[i+1,eqTitle(e),T.nome,g.g,'Não realizado',motivoOff(e,g)||'Não previsto','—',''],{center:[0,4,6]}); r++; continue; }
+        for(const g of medsDe(e,T)){ if(ensOff(e,g)){ cellRow(w4,r,[i+1,eqTitle(e),T.nome,g.g,'Não realizado',motivoOff(e,g)||'Não previsto','—',''],{center:[0,4,6]}); r++; continue; }
           for(const f of g.f){ const v=(e.m||{})[f[0]]; if(v===undefined||v==='') continue; cellRow(w4,r,[i+1,eqTitle(e),T.nome,`${g.g} – ${f[1]}`,v,'','',porTxtCampo(e,f[0])],{center:[0,4]}); r++; } }
         if(T.ext&&T.ext.excelRows) for(const x of T.ext.excelRows(e)){ const row=cellRow(w4,r,[i+1,eqTitle(e),T.nome,x[0],x[1],x[2],x[3]],{center:[0,4,6]});
           if(x[4]){ const c=row.getCell(7); c.font=font({bold:true,size:9,color:{argb:PC[x[4]]}}); c.fill=fill(PF[x[4]]); } r++; }
@@ -448,7 +451,7 @@ function criarModuloChecklist(cfg){
   }
 
   registrar({
-    k:cfg.k, nome:cfg.nome, curto:cfg.curto, icone:cfg.icone, desc:cfg.desc,
+    k:cfg.k, nome:cfg.nome, curto:cfg.curto, icone:cfg.icone, desc:cfg.desc, anexos:cfg.anexos,
     novoH:cfg.novoH, photoIds, vJob, vItem,
     resumo:(x)=>{ const eq=x.items||[]; const rs=eq.map(e=>equipResult(e,x.h)); const nc=rs.filter(r=>r.k==='nc'||r.k==='crit').length; const at=rs.filter(r=>r.k==='att').length;
       const w=rs.reduce((a,r)=>(r.k!=='pend'&&(a===null||RANK_RES[r.k]>RANK_RES[a]))?r.k:a,null);
