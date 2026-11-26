@@ -4,7 +4,7 @@ const TIPOS={
  MIT:{nome:'Motor de indução trifásico', grupo:'', icone:'⚙️',
   campos:[['pot','Potência (cv)'],['potkw','Potência (kW)'],['un','Tensão nominal (V)','','380'],['in','Corrente nominal (A)'],['rpm','Rotação nominal (rpm)'],['fs','Fator de serviço','','1,15'],
           ['isol','Classe de isolação',['F','H','B']],['ipg','Grau de proteção (IP)','','IP55'],['carcaca','Carcaça (IEC)'],['rolam','Rolamentos (dianteiro / traseiro)'],
-          ['acion','Acionamento',['Partida direta','Estrela-triângulo','Soft-starter','Inversor de frequência','Chave compensadora']],['carga_ac','Carga acionada (bomba, ventilador, compressor…)'],['rele_aj','Ajuste do relé térmico / proteção (A)'],['montagem','Montagem',['Horizontal','Vertical','Flangeado']]],
+          ['acion','Acionamento',['Partida direta','Estrela-triângulo','Soft-starter','Inversor de frequência','Chave compensadora']],['carga_ac','Carga acionada (bomba, ventilador, compressor…)'],['rele_aj','Ajuste do relé térmico / proteção (A)'],['montagem','Montagem',['Horizontal','Vertical','Flangeado']],['corrosao','Grau de corrosão da pintura (ISO 4628-3)',['Ri 0 – sem corrosão','Ri 1 – pontos isolados','Ri 2 – leve','Ri 3 – moderada','Ri 4 – acentuada','Ri 5 – generalizada']]],
   items:[
    ['base','Base, chumbadores e fixação','NBR 17094 / Fabricante','B'],
    ['acopl','Acoplamento, alinhamento e proteção do acoplamento','NR-12','B'],
@@ -13,6 +13,7 @@ const TIPOS={
    ['temp','Temperatura da carcaça (toque / termômetro)','Fabricante','B'],
    ['rolamento','Rolamentos: lubrificação, ruído, folga, vazamento de graxa','Fabricante','B'],
    ['umid','Umidade, óleo ou contaminação sobre o motor','NBR 17094','C'],
+   ['pintura','Pintura e corrosão: carcaça, tampas, caixa de ligação e base (elevar para B se Ri 3 ou maior)','ISO 12944 / ISO 4628-3','C'],
    ['caixa','Caixa de ligação: apertos, isolação, prensa-cabos, vedação','NBR 5410','B'],
    ['aterr','Aterramento da carcaça e da caixa de ligação','NBR 5410','A'],
    ['cabos','Cabos de alimentação: seção, estado, identificação','NBR 5410','B'],

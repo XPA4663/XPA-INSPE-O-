@@ -1,6 +1,6 @@
 /* XPA · Inspeções — service worker (funcionamento offline)
    Para publicar uma nova versão do app, altere o número em VERSION. */
-const VERSION = 'xpa-inspecoes-v4.4.1';
+const VERSION = 'xpa-inspecoes-v4.5';
 
 const LOCAL = [
   './',
@@ -15,6 +15,7 @@ const LOCAL = [
   './mod-spda.js',
   './mod-nr10.js',
   './mod-visita.js',
+  './mod-rdo.js',
   './mod-vlf.js',
   './mod-epi.js',
   './mod-proposta.js',

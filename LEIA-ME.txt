@@ -153,3 +153,19 @@ PASSO 1 – Regras do Firestore (obrigatório para a OS compartilhada)
 PASSO 2 – Publicar o app (GitHub)
  - Add file > Upload files: os 7 arquivos acima > Commit changes.
  - Abra o app com internet, feche e reabra para carregar a v4 (em todos os celulares da equipe).
+
+Atualização v4.5 – RDO (Relatório Diário de Obra) e pintura dos motores
+ - Novo módulo "📅 RDO – Relatório diário de obra": um trabalho por dia, com obra/OS, jornada e
+   intervalo, clima e condição de trabalho (manhã/tarde), efetivo com entrada/saída e total de horas,
+   atividades com situação, avanço (%) e fotos, equipamentos e materiais, segurança (DDS, APR, PT, EPI,
+   acidente), paralisações, ocorrências, pendências do cliente, programação do dia seguinte e
+   assinaturas na tela (responsável XPA e fiscal do cliente).
+ - Botão "＋ Novo RDO – dia seguinte": cria o RDO seguinte (RDO-001 → RDO-002) copiando obra, efetivo
+   e as atividades ainda não concluídas.
+ - Gera PDF no padrão XPA e Excel; publica na Área do Cliente como os demais relatórios.
+ - Motores (com testes e visual): novo item "Pintura e corrosão" e campo de grau de corrosão
+   (ISO 4628-3, Ri 0 a Ri 5).
+ - Arquivos novos/alterados: mod-rdo.js (novo), index.html, sw.js (VERSION = xpa-inspecoes-v4.5),
+   mod-motores.js, mod-motores-visual.js, LEIA-ME.txt.
+ - Para atualizar: no GitHub, "Add file > Upload files", envie os 6 arquivos (substituindo) > Commit.
+   Abra o app com internet e feche/reabra uma vez para carregar a v4.5.
