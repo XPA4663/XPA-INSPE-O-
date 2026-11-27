@@ -15,7 +15,12 @@ const TIPOS={
    ['umid','Umidade, óleo ou contaminação sobre o motor','NBR 17094','C'],
    ['pintura','Pintura e corrosão: carcaça, tampas, caixa de ligação e base (elevar para B se Ri 3 ou maior)','ISO 12944 / ISO 4628-3','C'],
    ['caixa','Caixa de ligação: apertos, isolação, prensa-cabos, vedação','NBR 5410','B'],
-   ['aterr','Aterramento da carcaça e da caixa de ligação','NBR 5410','A'],
+   ['aterr','Aterramento da carcaça (equipotencialização da carcaça à base/malha)','NBR 5410','A',
+    {rapidas:[
+      ['Sem aterramento visível','Ausência de aterramento externo visível (equipotencialização da carcaça à base/malha).','NC'],
+      ['Aterramento deficiente','Condutor de aterramento da carcaça presente, porém com conexão frouxa, oxidada ou subdimensionada.','NC'],
+      ['Aterramento OK','Carcaça aterrada: condutor de equipotencialização visível e conectado à base/malha.','C'],
+     ]}],
    ['cabos','Cabos de alimentação: seção, estado, identificação','NBR 5410','B'],
    ['prot','Proteção contra sobrecarga ajustada à corrente nominal','NBR 5410','A'],
    ['manobra','Contator / disjuntor / fusíveis: estado e dimensionamento','NBR 5410','B'],
@@ -38,7 +43,8 @@ const NORMAS_M=[
 const CRIT_M=[
   ['Inspeção visual','Cada item do checklist é verificado por observação direta, com o motor parado e/ou em operação, sem instrumentos de ensaio.'],
   ['Temperatura e vibração','Avaliadas pelo toque, termômetro infravermelho portátil ou percepção de ruído/vibração anormal; valores medidos, quando houver, são apenas indicativos.'],
-  ['Proteção','Ajuste do relé térmico comparado à corrente nominal de placa (≤ In).'],
+  ['Proteção','Ajuste do relé térmico igual ou inferior à corrente nominal de placa (In).'],
+  ['Aterramento','Verificação visual do condutor de equipotencialização da carcaça do motor à base/malha de aterramento.'],
 ];
 function jobFields(h){
   return `<div class="sec">Dados da inspeção</div>
@@ -71,7 +77,7 @@ criarModuloChecklist({
   phDiag:'Ex.: rolamento traseiro com ruído; relé térmico ajustado acima da In – corrigido para 28 A',
   phRec:'Ex.: substituir rolamentos 6309/6208 na próxima parada; realinhar acoplamento',
   assinLinha:(h)=>h.equipe?`Equipe executante: ${h.equipe}`:'',
-  tx:{ dadosSec:'Dados da inspeção', antes:'Antes da intervenção', depois:'Depois da intervenção',
+  tx:{ dadosSec:'Dados da inspeção', antes:'Vista geral do motor', depois:'Após correção',
     titulo:'Relatório de Inspeção Visual de Motores Elétricos', arquivo:'Relatorio_Inspecao_Visual_Motores', capa1:'Inspeção Visual', capa2:'Motores Elétricos', xlsTitulo:'INSPEÇÃO VISUAL DE MOTORES ELÉTRICOS',
     condSec:'Condições da inspeção', normas:NORMAS_M, criterios:CRIT_M,
     objetivo:['Este relatório apresenta o resultado da inspeção visual dos motores elétricos indicados, abrangendo as condições mecânicas (fixação, acoplamento, ventilação, rolamentos, ruído e vibração perceptíveis), elétricas (caixa de ligação, cabos, aterramento, dispositivos de manobra e proteção) e de segurança (comandos, sinalização e parada de emergência). O objetivo é identificar desvios que comprometam a segurança, a confiabilidade ou a vida útil dos motores e recomendar as ações de manutenção.',

@@ -85,6 +85,11 @@ function criarModuloChecklist(cfg){
   }
   function photoIds(e){ const X=(TIPOS[e.tipo]||{}).ext; return [...(e.pantes||[]),...(e.pdepois||[]),...(e.photos||[]),...Object.values(e.items||{}).flatMap(it=>it.photos||[]),...((X&&X.slots)||[]).flatMap(s=>e[s]||[])]; }
   function eqTitle(e){ const T=TIPOS[e.tipo]; return (e.d.tag||T.nome); }
+  /* v4.7 – utilidades do PDF */
+  const limpa=v=>String(v==null?'':v).replace(/\r/g,'').replace(/[ \t]+\n/g,'\n').replace(/\n{2,}/g,'\n').trim(); // tira linhas vazias / quebras sobrando
+  const umTipo=TIPOS_ORD.length===1;
+  const eqNomePdf=(e,i)=>`${i+1}. ${(e.d.tag||'').trim()||'Sem TAG'}`;                     // no PDF: nº + TAG (sem repetir o tipo)
+  const plural=(n,s,p)=>`${n} ${n===1?s:p}`;
 
   function equipResult(e,h){
     h=h||(CUR&&CUR.h)||{}; const T=TIPOS[e.tipo]; let auto=null, n={C:0,A:0,NC:0,NA:0}, ncs=[];
@@ -146,6 +151,8 @@ function criarModuloChecklist(cfg){
     <div class="sec">Checklist de inspeção</div>
     <div class="grp" style="border:none;background:none">${T.items.map(it=>{ const r=e.items[it[0]]||{}; const show=r.s==='A'||r.s==='NC';
       return `<div class="item card" style="margin-bottom:8px" data-it="${it[0]}"><div class="q">${esc(it[1])}</div><div class="ref">Ref.: ${esc(it[2])} · severidade padrão ${it[3]}</div>
+      ${it[4]&&it[4].nota?`<div class="note" style="margin-top:4px">ℹ️ ${esc(it[4].nota)}</div>`:''}
+      ${it[4]&&it[4].rapidas?`<div class="chips" style="margin:6px 0 0">${it[4].rapidas.map((q,qi)=>`<button type="button" class="chip qobs" data-q="${qi}" title="${esc(q[1])}">${esc(q[0])}</button>`).join('')}</div>`:''}
       <div class="seg">${['C','A','NC','NA'].map(s=>`<button data-s="${s}" class="${r.s===s?'on s-'+s:''}">${s==='C'?'Conforme':s==='A'?'Atenção':s==='NC'?'Não conf.':'N/A'}</button>`).join('')}</div>
       <div class="extra ${show?'show':''}">${sel('sev','Severidade',{sev:r.sev||it[3]},[['A',SEV.A.label],['B',SEV.B.label],['C',SEV.C.label]])}
         <label>Observação / evidência</label><textarea data-k="obs" placeholder="Descreva o que foi encontrado">${esc(r.obs||'')}</textarea>
@@ -190,6 +197,11 @@ function criarModuloChecklist(cfg){
         box.querySelectorAll('.seg button').forEach(x=>x.className=(x.dataset.s===r.s)?'on s-'+r.s:''); box.querySelector('.extra').classList.toggle('show',r.s==='A'||r.s==='NC'); saveCur(); refreshCalc(); });
       box.querySelector('select[data-k=sev]').onchange=(ev)=>{ get().sev=ev.target.value; saveCur(); refreshCalc(); };
       box.querySelector('textarea[data-k=obs]').oninput=(ev)=>{ get().obs=ev.target.value; saveCur(); };
+      /* observações rápidas (it[4].rapidas = [[rótulo, texto, status sugerido]]) */
+      box.querySelectorAll('button.qobs').forEach(b=>b.onclick=()=>{ const q=it[4].rapidas[+b.dataset.q]; const r=get(); const ta=box.querySelector('textarea[data-k=obs]');
+        if(!(r.obs||'').includes(q[1])) r.obs=(r.obs?r.obs.trimEnd()+'\n':'')+q[1];
+        if(q[2]&&!r.s){ r.s=q[2]; if(!r.sev) r.sev=it[3]; box.querySelectorAll('.seg button').forEach(x=>x.className=(x.dataset.s===r.s)?'on s-'+r.s:''); }
+        ta.value=r.obs; box.querySelector('.extra').classList.add('show'); saveCur(); refreshCalc(); });
     });
     $('#back').onclick=()=>go('job');
     $('#dup').onclick=()=>{ const n=novoItem(e.tipo,e); const i=CUR.items.indexOf(e); CUR.items.splice(i+1,0,n); ITEM=n; saveCur(); go('item'); toast(`${INcap} duplicado: informe a TAG e o nº de série.`); };
@@ -235,9 +247,9 @@ function criarModuloChecklist(cfg){
   /* ---------- plano de ação ---------- */
   function montarPlano(eqs,res){
     const eqName=(e,i)=>`${i+1}. ${eqTitle(e)}`; const plano=[];
-    eqs.forEach((e,i)=>{ const T=TIPOS[e.tipo];
-      for(const it of T.items){ const r=(e.items||{})[it[0]]; if(!r||(r.s!=='NC'&&r.s!=='A')) continue; plano.push({eq:eqName(e,i),tipo:T.nome,item:it[1],st:r.s,sev:r.s==='NC'?(r.sev||it[3]):'C',obs:r.obs||''}); }
-      for(const x of res[i].medBad) plano.push({eq:eqName(e,i),tipo:T.nome,item:`${x.label}: ${x.val} (limite ${x.lim})`,st:x.st==='nc'?'NC':'A',sev:x.st==='nc'?'B':'C',obs:'Medição fora do limite de referência.'});
+    eqs.forEach((e,i)=>{ const T=TIPOS[e.tipo]; const temTag=!!(e.d.tag||'').trim();
+      for(const it of T.items){ const r=(e.items||{})[it[0]]; if(!r||(r.s!=='NC'&&r.s!=='A')) continue; plano.push({eq:eqName(e,i),eqPdf:eqNomePdf(e,i),temTag,tipo:T.nome,item:it[1],st:r.s,sev:r.s==='NC'?(r.sev||it[3]):'C',obs:limpa(r.obs)}); }
+      for(const x of res[i].medBad) plano.push({eq:eqName(e,i),eqPdf:eqNomePdf(e,i),temTag,tipo:T.nome,item:`${x.label}: ${x.val} (limite ${x.lim})`,st:x.st==='nc'?'NC':'A',sev:x.st==='nc'?'B':'C',obs:'Medição fora do limite de referência.'});
     });
     const sevRank={A:0,B:1,C:2}; plano.sort((a,b)=>sevRank[a.sev]-sevRank[b.sev]); return plano;
   }
@@ -247,10 +259,12 @@ function criarModuloChecklist(cfg){
     if(!pdfPronto()) return;
     if(!CUR.items.length){ toast(`Adicione ao menos um ${IN}.`); return; }
     toast('Gerando relatório...');
-    const h=CUR.h; const K=pdfKit(h); const {doc,W,H,M,INK,band,sec,para,bul,tbl,ensure,TOC}=K;
+    const h=CUR.h; const K=pdfKit(h); const {doc,W,H,M,INK,band,sec,para,bul,ensure,TOC}=K;
+    /* v4.7: nenhuma linha de tabela é partida entre duas páginas */
+    const tbl=o=>K.tbl(Object.assign({rowPageBreak:'avoid'},o));
     const eqs=CUR.items, res=eqs.map(e=>equipResult(e,h));
     const cnt=k=>res.filter(r=>r.k===k).length;
-    const eqName=(e,i)=>`${i+1}. ${eqTitle(e)}`;
+    const eqName=eqNomePdf;
     const plano=montarPlano(eqs,res);
     let y=K.capa(tx.capa1,tx.capa2,cfg.capaRows(h,eqs.length));
 
@@ -275,27 +289,34 @@ function criarModuloChecklist(cfg){
     if(tx.limitacoes){ y=ensure(y,30); y=sec('Limitações',y); y=para(tx.limitacoes,y); }
 
     /* resumo */
-    doc.addPage(); y=22;
+    /* v4.7: o resumo continua na mesma página quando houver espaço (antes sempre abria página nova) */
+    y=ensure(y+4,90);
     y=sec('Resumo dos resultados',y);
     const kp=[[INPcap,eqs.length,C_NAVY],['Conformes',cnt('ok'),C_RES.ok],['Atenção',cnt('att'),C_RES.att],['NC – programar',cnt('nc'),C_RES.nc],['NC – urgente',cnt('crit'),C_RES.crit]];
-    const kw=(W-2*M-4*3)/5;
+    if(cnt('pend')) kp.push(['Sem avaliação',cnt('pend'),C_RES.pend]);   // os cartões passam a fechar com o total
+    const kw=(W-2*M-(kp.length-1)*3)/kp.length;
     kp.forEach(([l,v,c],i)=>{ const x=M+i*(kw+3); doc.setFillColor(...C_BG); doc.rect(x,y,kw,20,'F'); doc.setFillColor(...c); doc.rect(x,y,kw,1.4,'F');
       doc.setFont('helvetica','bold'); doc.setFontSize(17); doc.setTextColor(...c); doc.text(String(v),x+kw/2,y+11,{align:'center'});
       doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(...C_MUT); doc.text(doc.splitTextToSize(l,kw-2)[0],x+kw/2,y+17,{align:'center'}); });
     y+=26; doc.setTextColor(...INK);
-    if(cnt('pend')) y=para(`Atenção: ${cnt('pend')} ${IN}(s) sem avaliação completa.`,y,{italic:true,size:8.5,color:C_RES.crit});
-    const headRes=[INcap,'Tipo','Checklist','NC'].concat(comMeds?['Medições fora']:[]).concat(['Classificação']);
-    const ci=headRes.length-1;
-    y=tbl({startY:y, head:[headRes],
-      body:eqs.map((e,i)=>[eqName(e,i), TIPOS[e.tipo].nome, `${res[i].done}/${res[i].total}`, String(res[i].ncs.length)].concat(comMeds?[String(res[i].medBad.length)]:[]).concat([res[i].label])),
+    if(cnt('pend')){ const np=cnt('pend'); y=para(`Atenção: ${plural(np,IN,INP)} sem avaliação completa (${np===1?'consta':'constam'} como "Sem avaliação").`,y,{italic:true,size:8.5,color:C_RES.crit}); }
+    /* v4.7: coluna "Tipo" só aparece quando o módulo tem mais de um tipo; "Classificação" larga o bastante para não quebrar */
+    const colsRes=[[INcap,(e,i)=>eqName(e,i),{}]]
+      .concat(umTipo?[]:[['Tipo',e=>TIPOS[e.tipo].nome,{}]])
+      .concat([['Checklist',(e,i)=>`${res[i].done}/${res[i].total}`,{halign:'center',cellWidth:20}],['NC',(e,i)=>String(res[i].ncs.length),{halign:'center',cellWidth:12}]])
+      .concat(comMeds?[['Medições fora',(e,i)=>String(res[i].medBad.length),{halign:'center',cellWidth:22}]]:[])
+      .concat([['Classificação',(e,i)=>res[i].label,{fontStyle:'bold',cellWidth:46}]]);
+    const ci=colsRes.length-1;
+    y=tbl({startY:y, head:[colsRes.map(c=>c[0])],
+      body:eqs.map((e,i)=>colsRes.map(c=>c[1](e,i))),
       styles:{fontSize:8,cellPadding:1.6,lineColor:C_LINE,lineWidth:.2,textColor:INK,valign:'middle'},
-      columnStyles:Object.assign({2:{halign:'center',cellWidth:18},3:{halign:'center',cellWidth:12}},comMeds?{4:{halign:'center',cellWidth:20}}:{},{[ci]:{fontStyle:'bold',cellWidth:36}}),
+      columnStyles:Object.fromEntries(colsRes.map((c,k)=>[k,c[2]])),
       didParseCell:c=>{ if(c.section==='body'&&c.column.index===ci) c.cell.styles.textColor=C_RES[res[c.row.index].k]; }});
     if(plano.length){
       y=ensure(y,30); y=sec('Plano de ação – não conformidades e observações',y);
       y=para('Ordenado por severidade: A – urgente, B – programar na próxima parada, C – observação.',y,{size:8,color:C_MUT,italic:true});
       y=tbl({startY:y, head:[['Sev.',INcap,'Item / constatação','Observação']],
-        body:plano.map(p=>[p.sev, p.eq+'\n'+p.tipo, p.item, p.obs||'-']),
+        body:plano.map(p=>[p.sev, p.eqPdf+((!umTipo&&p.temTag)?'\n'+p.tipo:''), p.item, p.obs||'-']),
         styles:{fontSize:8,cellPadding:1.6,lineColor:C_LINE,lineWidth:.2,textColor:INK,valign:'top'},
         columnStyles:{0:{cellWidth:12,halign:'center',fontStyle:'bold'},1:{cellWidth:40},2:{cellWidth:66}},
         didParseCell:c=>{ if(c.section==='body'&&c.column.index===0) c.cell.styles.textColor=plano[c.row.index].sev==='A'?C_RES.crit:plano[c.row.index].sev==='B'?C_RES.nc:C_RES.att; }});
@@ -308,7 +329,7 @@ function criarModuloChecklist(cfg){
         const tl=Object.entries(tec); if(tl.length&&!(tl.length===1&&tl[0][0]==='Não identificado')){
           y=tbl({startY:y, head:[['Técnico','Ensaios registrados',INPcap,'Último registro']], body:tl.sort((a,b)=>b[1].n-a[1].n).map(([nm,t])=>[nm,String(t.n),[...t.eq].join(', '),t.ult?fmtQuando(t.ult):'-']),
             styles:{fontSize:8,cellPadding:1.6,lineColor:C_LINE,lineWidth:.2,textColor:INK,valign:'top'}, columnStyles:{0:{cellWidth:46,fontStyle:'bold'},1:{cellWidth:22,halign:'center'},3:{cellWidth:28}}}); } } }
-    if(h.obs){ y=ensure(y,20); y=sec('Observações gerais',y); y=para(h.obs,y); }
+    if(limpa(h.obs)){ y=ensure(y,20); y=sec('Observações gerais',y); y=para(limpa(h.obs),y); }
 
     /* fichas */
     const fichaSec=K.nextSec(); let fichaTocDone=false, nf=0;
@@ -316,16 +337,24 @@ function criarModuloChecklist(cfg){
       const e=eqs[i], r=res[i], d=e.d, T=TIPOS[e.tipo];
       nf++; doc.addPage(); y=22;
       if(!fichaTocDone){ TOC.push({t:`${fichaSec}. Fichas – ${INP}`,p:doc.getNumberOfPages()}); fichaTocDone=true; }
-      const ft=`${fichaSec}.${nf} ${eqName(e,i)} – ${T.nome}`; TOC.push({t:ft,p:doc.getNumberOfPages(),sub:true});
+      /* v4.7: sem numeração dupla ("10.1 1. 1101A") nem tipo repetido quando o motor não tem TAG */
+      const tagF=(d.tag||'').trim();
+      const ft=`${fichaSec}.${nf} ${tagF?tagF+' – '+T.nome:T.nome+' (sem TAG)'}`; TOC.push({t:ft,p:doc.getNumberOfPages(),sub:true});
       y=band(ft,y);
       const ident=[['TAG',d.tag||'-',cfg.lblLocal||'Localização',d.local||'-'],['Fabricante',d.fab||'-','Modelo',d.modelo||'-'],['Nº de série',d.serie||'-','Ano',d.ano||'-']];
       const ex=(T.campos||[]).map(c=>[c[1],d[c[0]]||'-']); for(let k=0;k<ex.length;k+=2){ ident.push([ex[k][0],ex[k][1],ex[k+1]?ex[k+1][0]:'',ex[k+1]?ex[k+1][1]:'']); }
       y=tbl({startY:y, columnStyles:{0:{fontStyle:'bold',fillColor:C_BG,textColor:C_NAVY,cellWidth:40},2:{fontStyle:'bold',fillColor:C_BG,textColor:C_NAVY,cellWidth:40}}, body:ident, styles:{fontSize:8,cellPadding:1.5,lineColor:C_LINE,lineWidth:.2,textColor:INK}})-1;
-      doc.setFillColor(...C_RES[r.k]); doc.roundedRect(M,y,W-2*M,9,1.5,1.5,'F'); doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(10);
-      doc.text(`${r.label}${r.manual?' (manual)':''}  ·  ${RES[r.k].acao}`.slice(0,105),M+3,y+6); doc.setTextColor(...INK); y+=13;
+      /* v4.7: faixa de classificação sem cortar o texto (antes: .slice(0,105)) – reduz a fonte e, se preciso, quebra em 2 linhas */
+      { const txt=`${r.label}${r.manual?' (manual)':''}  ·  ${RES[r.k].acao}`, wAv=W-2*M-6;
+        doc.setFont('helvetica','bold'); let fs=10; doc.setFontSize(fs);
+        while(fs>8.5&&doc.getTextWidth(txt)>wAv){ fs-=0.5; doc.setFontSize(fs); }
+        const lns=doc.getTextWidth(txt)>wAv?doc.splitTextToSize(txt,wAv):[txt]; const lh=fs*0.42, bh=Math.max(9,lns.length*lh+4.6);
+        doc.setFillColor(...C_RES[r.k]); doc.roundedRect(M,y,W-2*M,bh,1.5,1.5,'F'); doc.setTextColor(255);
+        lns.forEach((l,k)=>doc.text(l,M+3,y+2.3+lh*0.82+k*lh+(bh-4.6-lns.length*lh)/2));
+        doc.setTextColor(...INK); y+=bh+4; }
       if(r.manual&&e.just) y=para('Justificativa da classificação: '+e.just,y,{size:8.5});
       y=ensure(y,30);
-      const chk=T.items.map(it=>{ const x=(e.items||{})[it[0]]||{}; const st=x.s||''; return [it[1], it[2], st?STATUS[st].label:'—', st==='NC'?(x.sev||it[3]):(st==='A'?'C':'—'), x.obs||'']; });
+      const chk=T.items.map(it=>{ const x=(e.items||{})[it[0]]||{}; const st=x.s||''; return [it[1], it[2], st?STATUS[st].label:'—', st==='NC'?(x.sev||it[3]):(st==='A'?'C':'—'), limpa(x.obs)]; });
       y=tbl({startY:y, head:[['Item de inspeção','Ref.','Situação','Sev.','Observação']], body:chk,
         styles:{fontSize:7.6,cellPadding:1.3,lineColor:C_LINE,lineWidth:.2,textColor:INK,valign:'middle'},
         columnStyles:{0:{cellWidth:70},1:{cellWidth:28,textColor:C_MUT},2:{cellWidth:22,fontStyle:'bold',halign:'center'},3:{cellWidth:10,halign:'center',fontStyle:'bold'}},
@@ -343,18 +372,21 @@ function criarModuloChecklist(cfg){
       }
       if(T.ext&&comMeds&&T.ext.pdf) y=await T.ext.pdf(K,e,y,h);
       const A=(e.pantes||[])[0], D=(e.pdepois||[])[0];
-      if(A||D){ const cw=(W-2*M-6)/2, chh=64; y=ensure(y,chh+12); await K.foto(A,M,y,cw,chh,tx.antes); await K.foto(D,M+cw+6,y,cw,chh,tx.depois); y+=chh+9; }
-      if(e.diag){ y=ensure(y,16); y=para((cfg.lblDiag||'Diagnóstico / serviços executados')+': '+e.diag,y,{size:9}); }
-      if(e.rec){ y=ensure(y,16); y=para('Recomendações: '+e.rec,y,{size:9}); }
-      const extra=[...(e.pantes||[]).slice(1).map(id=>({id,cap:tx.antes+' – adicional'})),...(e.pdepois||[]).slice(1).map(id=>({id,cap:tx.depois+' – adicional'})),...(e.photos||[]).map(id=>({id,cap:'Foto complementar'}))];
-      for(const it of T.items){ const x=(e.items||{})[it[0]]; if(x&&x.photos) for(const id of x.photos) extra.push({id,cap:'Item: '+it[1]}); }
+      /* v4.7: par lado a lado só quando há as duas fotos; com uma só, ela vai para a galeria (sem quadro "Sem imagem") */
+      if(A&&D){ const cw=(W-2*M-6)/2, chh=64; y=ensure(y,chh+12); await K.foto(A,M,y,cw,chh,tx.antes); await K.foto(D,M+cw+6,y,cw,chh,tx.depois); y+=chh+9; }
+      if(limpa(e.diag)){ y=ensure(y,16); y=para((cfg.lblDiag||'Diagnóstico / serviços executados')+': '+limpa(e.diag),y,{size:9}); }
+      if(limpa(e.rec)){ y=ensure(y,16); y=para('Recomendações: '+limpa(e.rec),y,{size:9}); }
+      const umaSo=(A&&!D)?[{id:A,cap:tx.antes}]:(D&&!A)?[{id:D,cap:tx.depois}]:[];
+      const extra=[...umaSo,...(e.pantes||[]).slice(1).map(id=>({id,cap:tx.antes+' – adicional'})),...(e.pdepois||[]).slice(1).map(id=>({id,cap:tx.depois+' – adicional'})),...(e.photos||[]).map(id=>({id,cap:'Foto complementar'}))];
+      for(const it of T.items){ const x=(e.items||{})[it[0]]; if(x&&x.photos) for(const id of x.photos) extra.push({id,cap:'Item: '+it[1].replace(/\s*\([^)]*\)/g,'').trim()}); } // v4.7: legenda sem o texto entre parênteses
       y=await K.galeria(extra,y);
     }
 
     /* considerações e assinatura */
     y=ensure(y,70); y+=4; y=sec('Considerações finais',y);
     const nUrg=plano.filter(p=>p.sev==='A').length, nProg=plano.filter(p=>p.sev==='B').length;
-    y=para(`Foram inspecionados ${eqs.length} ${eqs.length===1?IN:INP}. ${cnt('ok')} em conformidade, ${cnt('att')} com observações, ${cnt('nc')} com não conformidade a programar e ${cnt('crit')} com não conformidade urgente. O plano de ação relaciona ${nUrg} item(ns) de severidade A, ${nProg} de severidade B e ${plano.length-nUrg-nProg} de severidade C.`,y);
+    const nPend=cnt('pend'), nC=plano.length-nUrg-nProg;
+    y=para(`${eqs.length===1?'Foi inspecionado':'Foram inspecionados'} ${plural(eqs.length,IN,INP)}: ${cnt('ok')} em conformidade, ${cnt('att')} com observações, ${cnt('nc')} com não conformidade a programar e ${cnt('crit')} com não conformidade urgente${nPend?` (${plural(nPend,IN,INP)} sem avaliação)`:''}. O plano de ação relaciona ${plural(nUrg,'item','itens')} de severidade A, ${plural(nProg,'item','itens')} de severidade B e ${plural(nC,'item','itens')} de severidade C.`,y);
     y=para(tx.consideracoes||'Recomenda-se a execução das ações de severidade A de imediato, a programação das de severidade B para a próxima parada e a repetição desta inspeção em periodicidade anual, ou conforme o plano de manutenção da instalação e a criticidade do processo atendido.',y);
     K.assinatura(y, cfg.assinLinha?cfg.assinLinha(h):'');
     const fname=`${slug(tx.arquivo||tx.titulo)}_${(h.numero?slug(h.numero)+'_':'')}${slug(h.cliente||'cliente')}_${h.data||''}.pdf`;

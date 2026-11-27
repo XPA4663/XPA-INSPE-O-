@@ -143,7 +143,7 @@ function flushSave(){ clearTimeout(saveT); if(saveFn) return saveFn(); }
 function today(){ const d=new Date(); return d.toISOString().slice(0,10); }
 function fmtDate(s){ if(!s) return ''; const [y,m,d]=s.split('-'); return d+'/'+m+'/'+y; }
 function editable(x){ return (x && Object.isFrozen && (Object.isFrozen(x) || (x.items && Object.isFrozen(x.items)))) ? JSON.parse(JSON.stringify(x)) : x; }
-function photoIdsJob(job){ const m=MODS[job.mod]; if(!m) return []; return (job.items||[]).flatMap(it=>m.photoIds(it)).concat((job.h&&job.h.anexCal)||[],(job.h&&job.h.anexArt)||[],(job.h&&job.h.anexDoc)||[]); }
+function photoIdsJob(job){ const m=MODS[job.mod]; if(!m) return []; return (job.items||[]).flatMap(it=>m.photoIds(it)).concat((job.h&&job.h.anexCal)||[],(job.h&&job.h.anexArt)||[]); }
 
 /* ======================= VIEWS (núcleo) ======================= */
 function setBar(html){ $('#bar').innerHTML=html; $('#bar').style.display=html?'flex':'none'; }
@@ -222,10 +222,10 @@ function bindJobFooter(){
   if(window.equipeBind) equipeBind();
 }
 /* ======================= ANEXOS (certificados de calibração e ART) ======================= */
-const ANEXOS_TODOS=[['anexCal','Certificados de calibração dos instrumentos'],['anexDoc','Documentos de referência (diagrama unifilar, estudos e memoriais)'],['anexArt','ART do serviço']];
-/* cada módulo escolhe os seus anexos (mod.anexos); sem escolha: calibração + ART. As letras A, B, C… seguem a ordem. */
-function anexosDe(m,hh){ const ks=(m&&m.anexos)||['anexCal','anexArt']; return ANEXOS_TODOS.filter(a=>ks.includes(a[0])&&!(hh&&a[0]==='anexDoc'&&!(hh[a[0]]||[]).length)).map(([k,t],i)=>[k,'Anexo '+'ABCDEFGH'[i]+' – '+t]); }
-let ANEXOS=anexosDe(null);
+const ANEXOS=[['anexCal','Anexo A – Certificados de calibração dos instrumentos'],['anexArt','Anexo B – ART do serviço']];
+/* v4.7: só os anexos que o módulo declara (cfg.anexos); letras renumeradas (ex.: motores visual -> "Anexo A – ART do serviço") */
+function anexosAtivos(){ const m=(typeof MOD==='function')?MOD():null; const ks=(m&&Array.isArray(m.anexos)&&m.anexos.length)?m.anexos:ANEXOS.map(a=>a[0]);
+  return ANEXOS.filter(([k])=>ks.includes(k)).map(([k,t],i)=>[k,t.replace(/^Anexo [A-Z]/,'Anexo '+String.fromCharCode(65+i))]); }
 let PDFJS=null;
 const PDFJS_CDN='https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/legacy/build/';
 async function pdfjs(){ if(PDFJS) return PDFJS;
@@ -243,10 +243,10 @@ async function pdfParaImagens(file,onProg){
     out.push({data,w:c.width,h:c.height}); }
   return out;
 }
-function anexosHtml(){ if(!CUR||!CUR.h) return ''; const h=CUR.h; ANEXOS=anexosDe(MODS[CUR.mod]);
-  return `<div class="sec">Anexos do relatório</div><div class="card"><div class="grid"><div><label>Nº da ART</label><input data-anxk="artNum" value="${esc(h.artNum||'')}" placeholder="Ex.: 2620261234567"></div><div><label>Data de registro da ART</label><input type="date" data-anxk="artData" value="${esc(h.artData||'')}"></div></div>${ANEXOS.map(([k,t])=>`<label>${t}</label><div class="row"><button class="lbtn" data-anx="${k}">📎 Anexar PDF ou foto</button><input type="file" class="hid" accept="application/pdf,image/*" multiple data-anxf="${k}"><span class="note" id="anxs_${k}">${(h[k]||[]).length} página(s)</span></div><div class="thumbs" id="th_${k}"></div>`).join('')}
-  <div class="note" style="margin-top:6px">PDFs são convertidos em imagens, página por página, e entram no final do relatório PDF, como anexos.</div></div>`; }
-function bindAnexos(){ if(!CUR||!CUR.h) return; const h=CUR.h; ANEXOS=anexosDe(MODS[CUR.mod]);
+function anexosHtml(){ if(!CUR||!CUR.h) return ''; const h=CUR.h;
+  return `<div class="sec">Anexos do relatório</div><div class="card"><div class="grid"><div><label>Nº da ART</label><input data-anxk="artNum" value="${esc(h.artNum||'')}" placeholder="Ex.: 2620261234567"></div><div><label>Data de registro da ART</label><input type="date" data-anxk="artData" value="${esc(h.artData||'')}"></div></div>${anexosAtivos().map(([k,t])=>`<label>${t}</label><div class="row"><button class="lbtn" data-anx="${k}">📎 Anexar PDF ou foto</button><input type="file" class="hid" accept="application/pdf,image/*" multiple data-anxf="${k}"><span class="note" id="anxs_${k}">${(h[k]||[]).length} página(s)</span></div><div class="thumbs" id="th_${k}"></div>`).join('')}
+  <div class="note" style="margin-top:6px">PDFs são convertidos em imagens, página por página, e entram no final do relatório PDF (${anexosAtivos().map(a=>a[1].split(' –')[0]).join(' e ')}).</div></div>`; }
+function bindAnexos(){ if(!CUR||!CUR.h) return; const h=CUR.h;
   document.querySelectorAll('[data-anxk]').forEach(el=>{ el.oninput=el.onchange=()=>{ h[el.dataset.anxk]=el.value; saveCur(); }; });
   ANEXOS.forEach(([k])=>{ h[k]=h[k]||[];
     const cnt=()=>{ const s=$('#anxs_'+k); if(s) s.textContent=h[k].length+' página(s)'; };
@@ -314,7 +314,8 @@ function pdfKit(h,o={}){
   const W=210, H=297, M=14, INK=[27,35,51], LIGHT=[184,194,214]; const TOC=[]; let secN=0, SUMPAGE=0;
   const K={doc,W,H,M,INK,LIGHT,TOC};
   K.band=(t,y)=>{ doc.setFillColor(...C_BAND); doc.rect(M,y,W-2*M,8,'F'); doc.setFillColor(...C_GOLD); doc.rect(M,y,1.4,8,'F');
-    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.text(doc.splitTextToSize(t,W-2*M-8)[0],M+4,y+5.5); doc.setTextColor(...INK); return y+11; };
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); let fs=10.5; doc.setFontSize(fs); while(fs>8&&doc.getTextWidth(t)>W-2*M-8){ fs-=0.5; doc.setFontSize(fs); } /* v4.7: reduz a fonte antes de cortar */
+    doc.text(doc.splitTextToSize(t,W-2*M-8)[0],M+4,y+5.5); doc.setTextColor(...INK); return y+11; };
   K.sec=(t,y)=>{ const tt=`${++secN}. ${t}`; TOC.push({t:tt,p:doc.getNumberOfPages()}); return K.band(tt,y); };
   K.nextSec=()=>++secN;
   K.ensure=(y,need)=>{ if(y+need>276){ doc.addPage(); return 22; } return y; };
@@ -327,13 +328,18 @@ function pdfKit(h,o={}){
   K.foto=async(id,x,y,cw,chh,cap,bold=true)=>{ doc.setDrawColor(...C_LINE); doc.rect(x,y,cw,chh); const P=id?await getPhoto(id):null;
     if(P){ const k=Math.min(cw/P.w,chh/P.h); try{ doc.addImage(P.data,'JPEG',x+(cw-P.w*k)/2,y+(chh-P.h*k)/2,P.w*k,P.h*k); }catch(e){} }
     else { doc.setFontSize(8); doc.setTextColor(...C_MUT); doc.text('Sem imagem',x+cw/2,y+chh/2,{align:'center'}); }
-    doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(7.5); doc.setTextColor(...(bold?C_NAVY:C_MUT)); doc.text(doc.splitTextToSize(cap,cw)[0],x,y+chh+4); doc.setTextColor(...INK); return !!P; };
+    doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(7.5); doc.setTextColor(...(bold?C_NAVY:C_MUT)); const cl=doc.splitTextToSize(cap||'',cw); if(cl.length>1){ doc.setFontSize(7); } const cl2=doc.splitTextToSize(cap||'',cw).slice(0,2); /* v4.7: legenda em até 2 linhas (antes cortava na 1ª) */
+    cl2.forEach((l,i)=>doc.text(l,x,y+chh+4+i*3.2)); doc.setTextColor(...INK); return !!P; };
   // galeria em 2 colunas; retorna y
   K.galeria=async(lista,y,titulo)=>{ if(!lista.length) return y; y=K.ensure(y,80); y=K.band(titulo||'Registro fotográfico',y);
-    const cw=(W-2*M-6)/2, chh=60; let col=0;
-    for(const p of lista){ const P=await getPhoto(p.id); if(!P) continue; if(col===0) y=K.ensure(y,chh+10);
-      await K.foto(p.id,M+col*(cw+6),y,cw,chh,p.cap,false); col++; if(col===2){ col=0; y+=chh+9; } }
-    if(col===1) y+=chh+9; return y; };
+    const cw=(W-2*M-6)/2, GAP=12; let chh=60, col=0;
+    const ok=[]; for(const p of lista){ if(await getPhoto(p.id)) ok.push(p); }
+    /* v4.7: se as fotos quase cabem na página, reduz um pouco a altura (até 45 mm) para não sobrar uma linha sozinha na página seguinte */
+    const rows=Math.ceil(ok.length/2), livre=276-y;
+    if(rows*(chh+GAP)>livre && rows*(45+GAP)<=livre) chh=Math.floor(livre/rows)-GAP;
+    for(const p of ok){ if(col===0) y=K.ensure(y,chh+GAP+1);
+      await K.foto(p.id,M+col*(cw+6),y,cw,chh,p.cap,false); col++; if(col===2){ col=0; y+=chh+GAP; } }
+    if(col===1) y+=chh+GAP; return y; };
   K.capa=(t1,t2,rows)=>{
     doc.setFillColor(...C_NAVY); doc.rect(0,0,W,H,'F');
     try{ doc.addImage(COVER_FULL,'JPEG',0,0,W,H); }catch(e){}
@@ -361,11 +367,13 @@ function pdfKit(h,o={}){
     if(linha2) doc.text(doc.splitTextToSize(linha2,W-2*M)[0],W/2,y+14,{align:'center'}); return y+18; };
   K.finish=async(title,fname)=>{
     window.XPA_PDF_INFO={h, titulo:title, arquivo:fname};
-    if(!o.rotulo && typeof ANEXOS!=='undefined') for(const [k,t] of anexosDe(CUR&&MODS[CUR.mod],h||{})){ const ids=(h&&h[k])||[]; const Ps=[]; for(const id of ids){ const P=await getPhoto(id); if(P) Ps.push(P); }
+    let semArt=false; if(!o.rotulo && typeof ANEXOS!=='undefined') for(const [k,t] of anexosAtivos()){ const ids=(h&&h[k])||[]; const Ps=[]; for(const id of ids){ const P=await getPhoto(id); if(P) Ps.push(P); }
       doc.addPage(); let y=22; TOC.push({t,p:doc.getNumberOfPages()}); y=K.band(t,y);
       if(k==='anexArt'&&(h.artNum||h.artData)){ y=K.para(`ART nº ${h.artNum||'—'}${h.artData?' · registrada em '+fmtDate(h.artData):''} · Responsável técnico: ${h.resp||RESP_PADRAO}`,y,{bold:true,size:9.5,color:C_NAVY}); }
+      if(!Ps.length&&k==='anexArt'&&!h.artNum) semArt=true;
       if(!Ps.length){ y=K.para(k==='anexCal'?'Certificados de calibração dos instrumentos utilizados disponíveis mediante solicitação.':'ART do serviço registrada no CREA-SP, disponível mediante solicitação.',y,{italic:true,size:9,color:C_MUT}); continue; }
       Ps.forEach((P,i)=>{ if(i>0){ doc.addPage(); y=22; } const mw=W-2*M, mh=276-y, kk=Math.min(mw/P.w,mh/P.h); try{ doc.addImage(P.data,'JPEG',(W-P.w*kk)/2,y,P.w*kk,P.h*kk); }catch(e){} }); }
+    if(semArt) setTimeout(()=>toast('Atenção: relatório gerado sem a ART anexada.'),2500);
     doc.addPage(); const BACKPAGE=doc.getNumberOfPages();
     if(SUMPAGE){ doc.setPage(SUMPAGE); let sy=22;
     doc.setFillColor(...C_BAND); doc.rect(M,sy,W-2*M,8,'F'); doc.setFillColor(...C_GOLD); doc.rect(M,sy,1.4,8,'F');
@@ -793,18 +801,14 @@ function bindContaBarra(){
 <script src="mod-se.js"></script>
 <script src="mod-gerador.js"></script>
 <script src="mod-motores.js"></script>
-<script src="mod-motores-visual.js"></script>
-<script src="mod-seletividade.js"></script>
 <script src="mod-spda.js"></script>
 <script src="mod-nr10.js"></script>
 <script src="mod-visita.js"></script>
-<script src="mod-rdo.js"></script>
 <script src="mod-vlf.js"></script>
 <script src="mod-epi.js"></script>
 <script src="mod-proposta.js"></script>
 <script src="equipe.js"></script>
 <script src="area-cliente.js"></script>
-<script src="leitura-placa.js"></script>
 <script>
 /* ======================= DIAGNÓSTICO ======================= */
 document.addEventListener('click',e=>{ if(e.target&&e.target.id==='sv'){
